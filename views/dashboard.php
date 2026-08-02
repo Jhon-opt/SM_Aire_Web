@@ -1,4 +1,13 @@
             <div class="container">
+                <!-- Banner de error API -->
+                <div class="api-error-banner hidden" id="apiErrorBanner">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span id="apiErrorText">No se pudo conectar con la API.</span>
+                    <button class="btn btn-sm btn-retry" onclick="loadAllData()">
+                        <i class="fas fa-rotate"></i> Reintentar
+                    </button>
+                </div>
+
                 <!-- Hero Section -->
                 <section class="hero">
                     <div class="hero-content">
@@ -149,8 +158,8 @@
                     <div class="section-header">
                         <h3><i class="fas fa-table"></i> Mediciones</h3>
                         <div class="table-actions">
-                            <button class="btn btn-sm" onclick="exportCSV()">
-                                <i class="fas fa-download"></i> Exportar CSV
+                            <button class="btn btn-sm" onclick="exportExcel()">
+                                <i class="fas fa-file-excel"></i> Exportar Excel
                             </button>
                             <button class="btn btn-sm" onclick="toggleOrden()">
                                 <i class="fas fa-sort"></i> <span id="ordenBtn">↓ Más recientes</span>

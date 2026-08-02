@@ -9,7 +9,9 @@ define('DB_CHARSET', 'utf8mb4');
 define('BASE_PATH', __DIR__);
 define('BASE_URL', rtrim((!empty($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME']), '/') ?: '/');
 
-define('FAKE_MODE', true);
+define('API_MODE', getenv('API_MODE') !== 'false');
+define('API_URL', rtrim(getenv('API_URL') ?: 'https://calidad-aire-p.onrender.com', '/'));
+define('FAKE_MODE', !API_MODE);
 define('ITEMS_PER_PAGE', 100);
 define('REFRESH_INTERVAL', 60);
 

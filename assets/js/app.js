@@ -61,6 +61,18 @@ function setConnectionStatus(connected) {
     }
 }
 
+function showApiError(message) {
+    const banner = document.getElementById('apiErrorBanner');
+    if (!banner) return;
+    document.getElementById('apiErrorText').textContent = message || 'No se pudo conectar con la API.';
+    banner.classList.remove('hidden');
+}
+
+function hideApiError() {
+    const banner = document.getElementById('apiErrorBanner');
+    if (banner) banner.classList.add('hidden');
+}
+
 // ── Filtros ─────────────────────────────────────────────
 async function onColegioChange() {
     const colegioId = document.getElementById('filterColegio').value;
@@ -141,15 +153,26 @@ function getIcon(param) {
     return icons[param] || 'fa-chart-simple';
 }
 
-function renderCards(tarjetas) {
+function renderCards(tarjetas, fecha) {
     const container = document.getElementById('cardsContainer');
+
+    if (tarjetas === null) {
+        container.innerHTML = `
+            <div class="card card-placeholder" colspan="8">
+                <div class="card-empty">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>No se pudieron cargar los datos</p>
+                </div>
+            </div>`;
+        return;
+    }
 
     if (!tarjetas || tarjetas.length === 0) {
         container.innerHTML = `
             <div class="card card-placeholder" colspan="8">
                 <div class="card-empty">
                     <i class="fas fa-microchip"></i>
-                    <p>No hay datos disponibles para los filtros seleccionados</p>
+                    <p>${fecha ? 'Sin lecturas recientes para los filtros seleccionados' : 'Selecciona un dispositivo para ver los datos'}</p>
                 </div>
             </div>`;
         return;
@@ -192,6 +215,17 @@ function renderStats(estadisticas, totalRegistros) {
     document.getElementById('totalRegistrosBadge').textContent =
         `${(totalRegistros || 0).toLocaleString()} registros`;
 
+    if (estadisticas === null) {
+        container.innerHTML = `
+            <div class="table-responsive">
+                <div class="empty-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>No se pudieron cargar las estadísticas</p>
+                </div>
+            </div>`;
+        return;
+    }
+
     if (!estadisticas || estadisticas.length === 0) {
         container.innerHTML = `
             <div class="table-responsive">
@@ -229,6 +263,18 @@ function renderStats(estadisticas, totalRegistros) {
 }
 
 // ── Table ───────────────────────────────────────────────
+function renderTablaError() {
+    const container = document.getElementById('tableContainer');
+    container.innerHTML = `
+        <div class="table-responsive">
+            <div class="empty-state">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>No se pudo cargar la tabla</p>
+            </div>
+        </div>`;
+    document.getElementById('paginationContainer').innerHTML = '';
+}
+
 function renderTabla(data) {
     const container = document.getElementById('tableContainer');
 
@@ -339,42 +385,51 @@ async function loadAllData() {
     const filters = getFilters();
     showLoading();
 
-    try {
-        await Promise.all([
-            loadUltimas(filters),
-            loadMediciones(filters),
-            loadEstadisticas(filters),
-            loadTabla(filters),
-        ]);
-        setConnectionStatus(true);
-    } catch (e) {
-        console.error('Error loading data:', e);
+    const results = await Promise.allSettled([
+        loadUltimas(filters),
+        loadMediciones(filters),
+        loadEstadisticas(filters),
+        loadTabla(filters),
+    ]);
+
+    const failed = results.filter(r => r.status === 'rejected');
+
+    if (failed.length === results.length) {
         setConnectionStatus(false);
-    } finally {
-        hideLoading();
+        showApiError('No se pudo conectar con la API. Verifica tu conexión o intenta de nuevo.');
+    } else {
+        setConnectionStatus(true);
+        hideApiError();
+        if (failed.length > 0) {
+            showApiError('Algunos datos no pudieron cargarse. Reintentando en el próximo ciclo…');
+        }
     }
+
+    hideLoading();
 }
 
 async function loadUltimas(filters) {
     try {
         const data = await apiGet(API.ultimas, filters);
-        renderCards(data.tarjetas);
+        renderCards(data.tarjetas, data.fecha);
         if (data.fecha) {
             document.getElementById('ultimaActualizacion').textContent = formatDate(data.fecha);
         }
     } catch (e) {
         console.error('Error loading ultimas:', e);
-        renderCards([]);
+        renderCards(null, null);
+        throw e;
     }
 }
 
 async function loadMediciones(filters) {
     try {
         const data = await apiGet(API.mediciones, filters);
-        renderCharts(data.series);
+        renderCharts(data.series, data.total);
     } catch (e) {
         console.error('Error loading mediciones:', e);
-        renderCharts(null);
+        renderCharts(null, 0);
+        throw e;
     }
 }
 
@@ -384,7 +439,8 @@ async function loadEstadisticas(filters) {
         renderStats(data.estadisticas, data.total_registros);
     } catch (e) {
         console.error('Error loading estadisticas:', e);
-        renderStats([], 0);
+        renderStats(null, 0);
+        throw e;
     }
 }
 
@@ -395,13 +451,8 @@ async function loadTabla(filters = null) {
         renderTabla(data);
     } catch (e) {
         console.error('Error loading tabla:', e);
-        document.getElementById('tableContainer').innerHTML = `
-            <div class="table-responsive">
-                <div class="empty-state">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <p>Error al cargar la tabla</p>
-                </div>
-            </div>`;
+        renderTablaError();
+        throw e;
     }
 }
 
@@ -464,13 +515,13 @@ function initDarkMode() {
     icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
 }
 
-function exportCSV() {
+function exportExcel() {
     const filters = getFilters();
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([k, v]) => {
         if (v) params.set(k, v);
     });
-    window.open(APP_BASE_URL + '/export/csv?' + params.toString(), '_blank');
+    window.open(APP_BASE_URL + '/export/excel?' + params.toString(), '_blank');
 }
 
 // ── Init ────────────────────────────────────────────────

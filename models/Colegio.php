@@ -4,6 +4,9 @@ class Colegio
 {
     public static function getAll(): array
     {
+        if (API_MODE) {
+            return array_map([ApiClient::class, 'normalizeColegio'], ApiClient::getColegios());
+        }
         if (FAKE_MODE) {
             return getFakeColegios();
         }
@@ -12,6 +15,10 @@ class Colegio
 
     public static function getById(int $id): ?array
     {
+        if (API_MODE) {
+            $colegio = ApiClient::getColegio($id);
+            return $colegio ? ApiClient::normalizeColegio($colegio) : null;
+        }
         if (FAKE_MODE) {
             $data = array_filter(getFakeColegios(), fn($c) => $c['id_colegio'] === $id);
             return !empty($data) ? reset($data) : null;
@@ -21,6 +28,11 @@ class Colegio
 
     public static function getDispositivos(int $id): array
     {
+        if (API_MODE) {
+            $colegio = ApiClient::getColegio($id);
+            $disps = $colegio['dispositivos'] ?? [];
+            return array_map([ApiClient::class, 'normalizeDispositivo'], $disps);
+        }
         if (FAKE_MODE) {
             return array_values(array_filter(getFakeDispositivos(), fn($d) => $d['id_colegio'] === $id));
         }
@@ -35,6 +47,10 @@ class Colegio
 
     public static function getTotalSensores(): int
     {
+        if (API_MODE) {
+            $disps = Dispositivo::getAll();
+            return count(array_filter($disps, fn($d) => $d['estado'] === 'activo'));
+        }
         if (FAKE_MODE) {
             return count(array_filter(getFakeDispositivos(), fn($d) => $d['estado'] === 'activo'));
         }
@@ -43,6 +59,9 @@ class Colegio
 
     public static function getTotalColegios(): int
     {
+        if (API_MODE) {
+            return count(self::getAll());
+        }
         if (FAKE_MODE) {
             return count(getFakeColegios());
         }
@@ -51,6 +70,10 @@ class Colegio
 
     public static function getTotalMediciones(): int
     {
+        if (API_MODE) {
+            $res = ApiClient::getMediciones(['limit' => 1]);
+            return (int) ($res['total'] ?? 0);
+        }
         if (FAKE_MODE) {
             return count(getFakeMediciones());
         }
@@ -59,6 +82,11 @@ class Colegio
 
     public static function getUltimaActualizacion(): ?string
     {
+        if (API_MODE) {
+            $res = ApiClient::getMediciones(['limit' => 1]);
+            $data = $res['data'] ?? [];
+            return !empty($data) ? ApiClient::dt($data[0]['fecha_hora']) : null;
+        }
         if (FAKE_MODE) {
             $mediciones = getFakeMediciones();
             if (empty($mediciones)) return null;

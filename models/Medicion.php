@@ -4,6 +4,30 @@ class Medicion
 {
     public static function getUltimasPorDispositivo(?int $idDispositivo = null, ?int $idColegio = null): array
     {
+        if (API_MODE) {
+            if ($idDispositivo) {
+                $row = ApiClient::getUltimaMedicion($idDispositivo);
+                return $row ? ApiClient::normalizeMedicion($row) : [];
+            }
+
+            if ($idColegio) {
+                $disps = Dispositivo::getByColegio($idColegio);
+            } else {
+                $disps = Dispositivo::getAll();
+            }
+
+            $mejor = null;
+            foreach ($disps as $d) {
+                $row = ApiClient::getUltimaMedicion($d['id_dispositivo']);
+                if (!$row) continue;
+                $norm = ApiClient::normalizeMedicion($row);
+                if ($mejor === null || strtotime($norm['fecha_hora']) > strtotime($mejor['fecha_hora'])) {
+                    $mejor = $norm;
+                }
+            }
+            return $mejor ?: [];
+        }
+
         if (FAKE_MODE) {
             $row = getFakeUltimaMedicion($idDispositivo, $idColegio);
             return $row ?: [];
@@ -38,6 +62,18 @@ class Medicion
         ?string $fechaInicio = null,
         ?string $fechaFin = null
     ): array {
+        if (API_MODE) {
+            [$desde, $hasta] = ApiClient::buildRange($intervalo, $fechaInicio, $fechaFin);
+
+            $query = ['id_dispositivo' => $idDispositivo];
+            if ($desde) $query['desde'] = $desde;
+            if ($hasta) $query['hasta'] = $hasta;
+
+            $rows = array_map([ApiClient::class, 'normalizeMedicion'], ApiClient::getAllMediciones($query));
+            usort($rows, fn($a, $b) => strtotime($a['fecha_hora']) - strtotime($b['fecha_hora']));
+            return $rows;
+        }
+
         if (FAKE_MODE) {
             return filterFakeMediciones($idDispositivo, null, $intervalo, $fechaInicio, $fechaFin);
         }
@@ -70,6 +106,11 @@ class Medicion
         ?string $fechaInicio = null,
         ?string $fechaFin = null
     ): array {
+        if (API_MODE) {
+            $filtradas = self::getHistory($idDispositivo, $intervalo, $fechaInicio, $fechaFin);
+            return self::computarEstadisticas($filtradas);
+        }
+
         if (FAKE_MODE) {
             return getFakeEstadisticas($idDispositivo, null, $intervalo, $fechaInicio, $fechaFin);
         }
@@ -112,6 +153,37 @@ class Medicion
         ?string $fechaInicio = null,
         ?string $fechaFin = null
     ): array {
+        if (API_MODE) {
+            [$desde, $hasta] = ApiClient::buildRange($intervalo, $fechaInicio, $fechaFin);
+
+            $query = ['id_dispositivo' => $idDispositivo];
+            if ($desde) $query['desde'] = $desde;
+            if ($hasta) $query['hasta'] = $hasta;
+
+            $total = (int) (ApiClient::getMediciones(array_merge($query, ['limit' => 1]))['total'] ?? 0);
+
+            $res = ApiClient::getMediciones(array_merge($query, [
+                'limit'  => ITEMS_PER_PAGE,
+                'offset' => ($pagina - 1) * ITEMS_PER_PAGE,
+            ]));
+
+            $rows = array_map([ApiClient::class, 'normalizeMedicion'], $res['data'] ?? []);
+
+            if (strtoupper($orden) === 'ASC') {
+                usort($rows, fn($a, $b) => strtotime($a['fecha_hora']) - strtotime($b['fecha_hora']));
+            }
+
+            $totalPaginas = max(1, ceil($total / ITEMS_PER_PAGE));
+
+            return [
+                'data'          => $rows,
+                'total'         => $total,
+                'pagina'        => $pagina,
+                'total_paginas' => $totalPaginas,
+                'por_pagina'    => ITEMS_PER_PAGE,
+            ];
+        }
+
         if (FAKE_MODE) {
             return getFakeTabla($idDispositivo, null, $pagina, $orden, $intervalo, $fechaInicio, $fechaFin);
         }
@@ -155,5 +227,28 @@ class Medicion
             'total_paginas' => $totalPaginas,
             'por_pagina'    => ITEMS_PER_PAGE,
         ];
+    }
+
+    private static function computarEstadisticas(array $filtradas): array
+    {
+        if (empty($filtradas)) return [];
+
+        $parametros = ['pm2_5', 'pm10', 'co', 'co2', 'o3', 'no2', 'temperatura', 'humedad'];
+        $result = ['total_registros' => count($filtradas)];
+
+        foreach ($parametros as $p) {
+            $vals = array_filter(array_map(fn($m) => $m[$p] ?? null, $filtradas));
+            if (empty($vals)) {
+                $result["avg_{$p}"] = 0;
+                $result["max_{$p}"] = 0;
+                $result["min_{$p}"] = 0;
+            } else {
+                $result["avg_{$p}"] = round(array_sum($vals) / count($vals), 2);
+                $result["max_{$p}"] = round(max($vals), 2);
+                $result["min_{$p}"] = round(min($vals), 2);
+            }
+        }
+
+        return $result;
     }
 }

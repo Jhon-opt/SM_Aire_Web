@@ -4,6 +4,11 @@ class Dispositivo
 {
     public static function getAll(): array
     {
+        if (API_MODE) {
+            $result = array_map([ApiClient::class, 'normalizeDispositivo'], ApiClient::getDispositivos());
+            usort($result, fn($a, $b) => strcmp($a['codigo'], $b['codigo']));
+            return $result;
+        }
         if (FAKE_MODE) {
             $result = getFakeDispositivos();
             usort($result, fn($a, $b) => strcmp($a['codigo'], $b['codigo']));
@@ -14,6 +19,10 @@ class Dispositivo
 
     public static function getById(int $id): ?array
     {
+        if (API_MODE) {
+            $disp = ApiClient::getDispositivo($id);
+            return $disp ? ApiClient::normalizeDispositivo($disp) : null;
+        }
         if (FAKE_MODE) {
             $data = array_filter(getFakeDispositivos(), fn($d) => $d['id_dispositivo'] === $id);
             return !empty($data) ? reset($data) : null;
@@ -23,6 +32,14 @@ class Dispositivo
 
     public static function getByColegio(int $idColegio): array
     {
+        if (API_MODE) {
+            $result = array_values(array_filter(
+                self::getAll(),
+                fn($d) => $d['id_colegio'] === $idColegio
+            ));
+            usort($result, fn($a, $b) => strcmp($a['codigo'], $b['codigo']));
+            return $result;
+        }
         if (FAKE_MODE) {
             $result = array_values(array_filter(
                 getFakeDispositivos(),
@@ -39,6 +56,14 @@ class Dispositivo
 
     public static function getEstadoCounts(): array
     {
+        if (API_MODE) {
+            $disps = self::getAll();
+            $result = ['activo' => 0, 'inactivo' => 0, 'mantenimiento' => 0];
+            foreach ($disps as $d) {
+                $result[$d['estado']] = ($result[$d['estado']] ?? 0) + 1;
+            }
+            return $result;
+        }
         if (FAKE_MODE) {
             $disps = getFakeDispositivos();
             $result = ['activo' => 0, 'inactivo' => 0, 'mantenimiento' => 0];

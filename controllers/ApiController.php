@@ -176,6 +176,41 @@ class ApiController
 
     private function getTablaMultiDispositivo(array $ids, int $pagina, string $orden, string $intervalo, ?string $fechaInicio, ?string $fechaFin): array
     {
+        if (API_MODE) {
+            $orden = strtoupper($orden) === 'ASC' ? 'ASC' : 'DESC';
+            [$desde, $hasta] = ApiClient::buildRange($intervalo, $fechaInicio, $fechaFin);
+
+            $todas = [];
+            $queryBase = [];
+            if ($desde) $queryBase['desde'] = $desde;
+            if ($hasta) $queryBase['hasta'] = $hasta;
+
+            foreach ($ids as $did) {
+                $rows = ApiClient::getAllMediciones(array_merge($queryBase, ['id_dispositivo' => $did]));
+                $todas = array_merge($todas, array_map([ApiClient::class, 'normalizeMedicion'], $rows));
+            }
+
+            usort($todas, fn($a, $b) => strtotime($b['fecha_hora']) - strtotime($a['fecha_hora']));
+
+            $total = count($todas);
+            $totalPaginas = max(1, ceil($total / ITEMS_PER_PAGE));
+
+            $offset = ($pagina - 1) * ITEMS_PER_PAGE;
+            $rows = array_slice($todas, $offset, ITEMS_PER_PAGE);
+
+            if ($orden === 'ASC') {
+                $rows = array_reverse($rows);
+            }
+
+            return [
+                'data'          => $rows,
+                'total'         => $total,
+                'pagina'        => $pagina,
+                'total_paginas' => $totalPaginas,
+                'por_pagina'    => ITEMS_PER_PAGE,
+            ];
+        }
+
         $orden = strtoupper($orden) === 'ASC' ? 'ASC' : 'DESC';
         $offset = ($pagina - 1) * ITEMS_PER_PAGE;
 

@@ -2,7 +2,9 @@
 
 require_once __DIR__ . '/config.php';
 
-if (FAKE_MODE) {
+if (API_MODE) {
+    require_once __DIR__ . '/includes/ApiClient.php';
+} elseif (FAKE_MODE) {
     require_once __DIR__ . '/includes/fake_data.php';
 } else {
     require_once __DIR__ . '/includes/Database.php';
@@ -29,7 +31,7 @@ $router->get('api/mediciones', [new ApiController(), 'mediciones']);
 $router->get('api/estadisticas', [new ApiController(), 'estadisticas']);
 $router->get('api/tabla', [new ApiController(), 'tabla']);
 
-$router->get('export/csv', [new ExportController(), 'csv']);
+$router->get('export/excel', [new ExportController(), 'excel']);
 
 $method = $_SERVER['REQUEST_METHOD'];
 $uri = $_GET['url'] ?? '';

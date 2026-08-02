@@ -497,6 +497,109 @@ section { margin-bottom: 1.5rem; }
     height: 200px;
 }
 
+.chart-card-actions {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.chart-expand-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-light);
+    cursor: pointer;
+    font-size: .8rem;
+    transition: background .15s ease, color .15s ease;
+}
+
+.chart-expand-btn:hover {
+    background: var(--bg);
+    color: var(--text);
+}
+
+/* ── Chart Modal ───────────────────────────────────────── */
+.chart-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .55);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+}
+
+.chart-modal-overlay.hidden {
+    display: none;
+}
+
+.chart-modal {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 1100px;
+    height: 82vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.chart-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.chart-modal-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.chart-modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background .15s ease, color .15s ease;
+}
+
+.chart-modal-close:hover {
+    background: rgba(239, 68, 68, .1);
+    color: #EF4444;
+}
+
+.chart-modal-body {
+    flex: 1;
+    position: relative;
+    padding: 1rem 1.25rem 1.25rem;
+}
+
+.chart-modal-body canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+body.modal-open {
+    overflow: hidden;
+}
+
 /* ── Table ─────────────────────────────────────────────── */
 .table-responsive {
     overflow-x: auto;
@@ -714,6 +817,38 @@ section { margin-bottom: 1.5rem; }
 
 .error-card h2 { color: #EF4444; margin-bottom: .5rem; }
 .error-card p { color: var(--text-secondary); }
+
+/* ── API Error Banner ──────────────────────────────────── */
+.api-error-banner {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    background: rgba(239, 68, 68, .1);
+    border: 1px solid rgba(239, 68, 68, .35);
+    color: #DC2626;
+    border-radius: var(--radius);
+    padding: .75rem 1rem;
+    margin-bottom: 1rem;
+    font-size: .9rem;
+    flex-wrap: wrap;
+}
+
+.api-error-banner.hidden { display: none; }
+
+.api-error-banner i { font-size: 1.1rem; }
+
+.api-error-banner span { flex: 1; min-width: 200px; }
+
+.api-error-banner .btn-retry {
+    background: #DC2626;
+    border-color: #DC2626;
+    color: #fff;
+}
+
+.api-error-banner .btn-retry:hover {
+    background: #B91C1C;
+    border-color: #B91C1C;
+}
 
 /* ── Animations ────────────────────────────────────────── */
 @keyframes fadeIn {
