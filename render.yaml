@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: sm-aire-web
+    runtime: docker
+    plan: free
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/filtros
+    envVars:
+      - key: API_MODE
+        value: "true"
+      - key: API_URL
+        value: https://calidad-aire-p.onrender.com
