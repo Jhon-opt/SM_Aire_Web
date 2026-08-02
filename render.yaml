@@ -5,7 +5,7 @@ services:
     plan: free
     dockerContext: .
     dockerfilePath: ./Dockerfile
-    healthCheckPath: /api/filtros
+    healthCheckPath: /
     envVars:
       - key: API_MODE
         value: "true"
