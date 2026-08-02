@@ -1,0 +1,56 @@
+/* =============================================================
+   Air Monitor - Modo Oscuro
+   ============================================================= */
+[data-theme="dark"] {
+    --bg: #0F172A;
+    --bg-card: #1E293B;
+    --bg-sidebar: #0B1120;
+    --text: #E2E8F0;
+    --text-secondary: #94A3B8;
+    --text-light: #64748B;
+    --text-sidebar: #94A3B8;
+    --border: #334155;
+    --shadow: 0 1px 3px rgba(0,0,0,.3), 0 1px 2px rgba(0,0,0,.2);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.4), 0 4px 6px -2px rgba(0,0,0,.25);
+}
+
+[data-theme="dark"] .hero {
+    background: linear-gradient(135deg, #3730A3, #5B21B6);
+}
+
+[data-theme="dark"] .filter-group select,
+[data-theme="dark"] .filter-group input {
+    background: var(--bg);
+    border-color: var(--border);
+    color: var(--text);
+}
+
+[data-theme="dark"] .data-table thead { background: var(--bg); }
+[data-theme="dark"] .stats-table thead { background: var(--bg); }
+
+[data-theme="dark"] .btn {
+    background: var(--bg);
+    border-color: var(--border);
+    color: var(--text);
+}
+
+[data-theme="dark"] .btn:hover { background: var(--bg-card); }
+
+[data-theme="dark"] .page-btn { background: var(--bg); border-color: var(--border); }
+[data-theme="dark"] .page-btn:hover { border-color: var(--primary); }
+
+[data-theme="dark"] .loading-overlay { background: rgba(0,0,0,.6); }
+[data-theme="dark"] .loading-spinner { background: var(--bg-card); }
+
+[data-theme="dark"] .badge-auto-refresh { background: rgba(129,140,248,.1); }
+
+[data-theme="dark"] .nav-item:hover { background: rgba(255,255,255,.05); }
+
+[data-theme="dark"] .sidebar-toggle {
+    background: var(--bg-card);
+    color: var(--text);
+}
+
+[data-theme="dark"] .card-quality.bueno { background: rgba(16,185,129,.08); }
+[data-theme="dark"] .card-quality.moderado { background: rgba(245,158,11,.08); }
+[data-theme="dark"] .card-quality.malo { background: rgba(239,68,68,.08); }

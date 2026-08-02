@@ -1,0 +1,16 @@
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Composer
+/vendor/
+
+# Logs y temporales
+*.log
+/tmp/
+
+# Sistema y editor
+.DS_Store
+.idea/
+.vscode/
