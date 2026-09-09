@@ -12,9 +12,19 @@ $__isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
 define('BASE_URL', rtrim(($__isHttps ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . dirname($_SERVER['SCRIPT_NAME']), '/') ?: '/');
 unset($__isHttps);
 
-define('API_MODE', getenv('API_MODE') !== 'false');
 define('API_URL', rtrim(getenv('API_URL') ?: 'https://calidad-aire-p.onrender.com', '/'));
-define('FAKE_MODE', !API_MODE);
+
+// Modo de datos: 'api' (API externa), 'db' (MySQL local) o 'fake' (datos de prueba).
+// Se puede fijar con la variable de entorno APP_MODE (o SetEnv en .htaccess).
+// Por compatibilidad: si APP_MODE no está definido, API_MODE=false => 'fake', otro caso => 'api'.
+$__appMode = getenv('APP_MODE');
+if ($__appMode === false || $__appMode === '') {
+    $__appMode = (getenv('API_MODE') !== 'false') ? 'api' : 'fake';
+}
+define('APP_MODE', $__appMode);
+define('API_MODE', APP_MODE === 'api');
+define('FAKE_MODE', APP_MODE === 'fake');
+unset($__appMode);
 define('ITEMS_PER_PAGE', 100);
 define('REFRESH_INTERVAL', 60);
 
