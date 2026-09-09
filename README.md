@@ -1,20 +1,32 @@
-# SM_Aire_Web
+# SM_Aire_Web — rama `cpanel`
 
-Dashboard web de calidad del aire que consume la API desplegada en Render (`https://calidad-aire-p.onrender.com`).
+Dashboard web de calidad del aire. En esta rama el modo por defecto es **MySQL local** (deploy en cPanel con `APP_MODE=db`).
+
+> La rama `main` usa la API remota de Render por defecto. Esta rama `cpanel` existe para hosting compartido sin depender de la API.
 
 ## Requisitos
 
-- PHP 8.2+ (extensiones `xmlwriter`, `simplexml`, `libxml`)
-- Conexión a internet (consume la API remota)
+- PHP 8.1+ con PDO MySQL
+- MySQL/MariaDB local (ver `database/schema-cpanel.sql`)
 
 ## Configuración
 
-Variables de entorno (opcionales, con defaults seguros):
+Variables de entorno (o `SetEnv` en `.htaccess`, ver ejemplo comentado arriba del todo):
 
-| Variable    | Default                               | Descripción |
-|-------------|---------------------------------------|-------------|
-| `API_MODE`  | `true` (cualquier valor distinto de `"false"`) | Usa la API remota en vez de datos falsos |
-| `API_URL`   | `https://calidad-aire-p.onrender.com` | URL base de la API |
+| Variable    | Default        | Descripción |
+|-------------|----------------|-------------|
+| `APP_MODE`  | `db`           | `api` (API remota), `db` (MySQL local) o `fake` (datos de prueba) |
+| `API_URL`   | `https://calidad-aire-p.onrender.com` | URL base de la API (solo modo `api`) |
+| `DB_HOST` / `DB_NAME` / `DB_USER` / `DB_PASS` | `localhost` / `air_monitor` / `root` / `` | Credenciales MySQL (solo modo `db`) |
+
+## Deploy en cPanel (subdominio + MySQL local)
+
+1. Crear el subdominio (ej: `aire.tudominio.com`, raíz `public_html/aire`) y asignarle PHP 8.1+.
+2. Crear la BD y el usuario en **MySQL Databases** (anotar credenciales).
+3. En **phpMyAdmin**, con la BD seleccionada, importar `database/schema-cpanel.sql`.
+4. Subir el ZIP de esta rama a `public_html/aire` y extraerlo (que `index.php` quede en la raíz).
+5. Editar el `.htaccess`: descomentar el bloque de arriba y completar `DB_*`.
+6. Probar: `/dashboard`, `/documentacion`, `/documentacion/pdf`.
 
 ## Local (Docker)
 

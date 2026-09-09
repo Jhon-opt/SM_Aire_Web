@@ -1,3 +1,11 @@
+# --- cPanel: descomenta y completa con tus credenciales ---
+# (Esta rama usa modo 'db' por defecto; estas líneas solo fijan la BD)
+# SetEnv DB_HOST localhost
+# SetEnv DB_NAME tuusuario_airmon
+# SetEnv DB_USER tuusuario_airuser
+# SetEnv DB_PASS tu_contraseña
+# Para forzar otro modo: SetEnv APP_MODE api  (o fake para datos de prueba)
+
 RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

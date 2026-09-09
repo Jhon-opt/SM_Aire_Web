@@ -16,11 +16,14 @@ define('API_URL', rtrim(getenv('API_URL') ?: 'https://calidad-aire-p.onrender.co
 
 // Modo de datos: 'api' (API externa), 'db' (MySQL local) o 'fake' (datos de prueba).
 // Se puede fijar con la variable de entorno APP_MODE (o SetEnv en .htaccess).
-// Por compatibilidad: si APP_MODE no está definido, API_MODE=false => 'fake', otro caso => 'api'.
+// En esta rama el default es 'db' (deploy cPanel con MySQL local).
+// Compatibilidad: API_MODE=api => 'api', API_MODE=false => 'fake'.
 $__appMode = getenv('APP_MODE');
 if ($__appMode === false || $__appMode === '') {
-    $__appMode = (getenv('API_MODE') !== 'false') ? 'api' : 'fake';
+    $__apiMode = getenv('API_MODE');
+    $__appMode = ($__apiMode === 'api') ? 'api' : (($__apiMode === 'false') ? 'fake' : 'db');
 }
+unset($__apiMode);
 define('APP_MODE', $__appMode);
 define('API_MODE', APP_MODE === 'api');
 define('FAKE_MODE', APP_MODE === 'fake');
