@@ -32,10 +32,13 @@
                     <i class="fas fa-chart-line"></i>
                     <span>Dashboard</span>
                 </a>
+                <!-- Oculto temporalmente a pedido (documentación en edición).
+                     Para reactivar, descomentar el siguiente bloque.
                 <a href="<?= BASE_URL ?>/documentacion" class="nav-item <?= ($nav ?? '') === 'docs' ? 'active' : '' ?>">
                     <i class="fas fa-book-open"></i>
                     <span>Documentación</span>
                 </a>
+                -->
                 <a href="#" class="nav-item" onclick="event.preventDefault(); toggleDarkMode()">
                     <i class="fas fa-moon" id="darkModeIcon"></i>
                     <span>Modo Oscuro</span>

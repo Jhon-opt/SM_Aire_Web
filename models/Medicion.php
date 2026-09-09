@@ -81,18 +81,13 @@ class Medicion
         $sql = "SELECT m.* FROM medicion m WHERE m.id_dispositivo = ?";
         $params = [$idDispositivo];
 
-        if ($fechaInicio && $fechaFin) {
+        [$fi, $ff] = normalizarRangoFechas($fechaInicio, $fechaFin);
+        if ($fi !== null) {
             $sql .= ' AND m.fecha_hora >= ? AND m.fecha_hora <= ?';
-            $params[] = $fechaInicio;
-            $params[] = $fechaFin;
+            $params[] = $fi;
+            $params[] = $ff;
         } else {
-            $limites = [
-                '24h' => '-24 HOUR',
-                '7d'  => '-7 DAY',
-                '30d' => '-30 DAY',
-            ];
-            $intervalo_sql = $limites[$intervalo] ?? '-24 HOUR';
-            $sql .= ' AND m.fecha_hora >= DATE_SUB(NOW(), INTERVAL ' . $intervalo_sql . ')';
+            $sql .= condicionIntervalo('m.fecha_hora', $intervalo);
         }
 
         $sql .= ' ORDER BY m.fecha_hora ASC';
@@ -127,18 +122,13 @@ class Medicion
                 FROM medicion WHERE id_dispositivo = ?";
         $params = [$idDispositivo];
 
-        if ($fechaInicio && $fechaFin) {
+        [$fi, $ff] = normalizarRangoFechas($fechaInicio, $fechaFin);
+        if ($fi !== null) {
             $sql .= ' AND fecha_hora >= ? AND fecha_hora <= ?';
-            $params[] = $fechaInicio;
-            $params[] = $fechaFin;
+            $params[] = $fi;
+            $params[] = $ff;
         } else {
-            $limites = [
-                '24h' => '-24 HOUR',
-                '7d'  => '-7 DAY',
-                '30d' => '-30 DAY',
-            ];
-            $intervalo_sql = $limites[$intervalo] ?? '-24 HOUR';
-            $sql .= ' AND fecha_hora >= DATE_SUB(NOW(), INTERVAL ' . $intervalo_sql . ')';
+            $sql .= condicionIntervalo('fecha_hora', $intervalo);
         }
 
         $result = Database::fetchOne($sql, $params);
@@ -196,20 +186,20 @@ class Medicion
         $params = [$idDispositivo];
 
         if ($fechaInicio && $fechaFin) {
+            [$fi, $ff] = normalizarRangoFechas($fechaInicio, $fechaFin);
+        } else {
+            $fi = $ff = null;
+        }
+
+        if ($fi !== null) {
             $sql .= ' AND m.fecha_hora >= ? AND m.fecha_hora <= ?';
             $countSql .= ' AND fecha_hora >= ? AND fecha_hora <= ?';
-            $params[] = $fechaInicio;
-            $params[] = $fechaFin;
+            $params[] = $fi;
+            $params[] = $ff;
             $countParams = $params;
         } else {
-            $limites = [
-                '24h' => '-24 HOUR',
-                '7d'  => '-7 DAY',
-                '30d' => '-30 DAY',
-            ];
-            $intervalo_sql = $limites[$intervalo] ?? '-24 HOUR';
-            $sql .= ' AND m.fecha_hora >= DATE_SUB(NOW(), INTERVAL ' . $intervalo_sql . ')';
-            $countSql .= ' AND fecha_hora >= DATE_SUB(NOW(), INTERVAL ' . $intervalo_sql . ')';
+            $sql .= condicionIntervalo('m.fecha_hora', $intervalo);
+            $countSql .= condicionIntervalo('fecha_hora', $intervalo);
             $countParams = $params;
         }
 

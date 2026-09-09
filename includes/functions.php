@@ -127,6 +127,49 @@ function asset(string $path): string
     return BASE_URL . '/assets/' . ltrim($path, '/');
 }
 
+/**
+ * Horas que cubre un intervalo predefinido.
+ * null = sin límite inferior ("Todo el historial").
+ */
+function intervaloHoras(string $intervalo): ?int
+{
+    return match ($intervalo) {
+        '24h' => 24,
+        '7d'  => 24 * 7,
+        '30d' => 24 * 30,
+        default => null,
+    };
+}
+
+/**
+ * Condición SQL para un intervalo predefinido (rango relativo a NOW()).
+ * Devuelve '' cuando no hay límite (todo el historial).
+ */
+function condicionIntervalo(string $columna, string $intervalo): string
+{
+    $horas = intervaloHoras($intervalo);
+    if ($horas === null) {
+        return '';
+    }
+    return " AND {$columna} >= DATE_SUB(NOW(), INTERVAL {$horas} HOUR)";
+}
+
+/**
+ * Normaliza un rango personalizado (inputs date YYYY-MM-DD) a día completo.
+ * Devuelve [inicio 00:00:00, fin 23:59:59] o [null, null] si es inválido.
+ */
+function normalizarRangoFechas(?string $inicio, ?string $fin): array
+{
+    $ok = fn($v) => is_string($v) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $v);
+    if (!$ok($inicio) || !$ok($fin)) {
+        return [null, null];
+    }
+    if ($inicio > $fin) {
+        [$inicio, $fin] = [$fin, $inicio];
+    }
+    return [$inicio . ' 00:00:00', $fin . ' 23:59:59'];
+}
+
 function view(string $name, array $data = []): void
 {
     extract($data);

@@ -219,15 +219,19 @@ class ApiController
         $countSql = "SELECT COUNT(*) FROM medicion WHERE id_dispositivo IN ({$placeholders})";
 
         if ($fechaInicio && $fechaFin) {
+            [$fi, $ff] = normalizarRangoFechas($fechaInicio, $fechaFin);
+        } else {
+            $fi = $ff = null;
+        }
+
+        if ($fi !== null) {
             $sql .= ' AND m.fecha_hora >= ? AND m.fecha_hora <= ?';
             $countSql .= ' AND fecha_hora >= ? AND fecha_hora <= ?';
-            $params = array_merge($ids, [$fechaInicio, $fechaFin]);
+            $params = array_merge($ids, [$fi, $ff]);
             $countParams = $params;
         } else {
-            $limites = ['24h' => '-24 HOUR', '7d' => '-7 DAY', '30d' => '-30 DAY'];
-            $intervalo_sql = $limites[$intervalo] ?? '-24 HOUR';
-            $sql .= ' AND m.fecha_hora >= DATE_SUB(NOW(), INTERVAL ' . $intervalo_sql . ')';
-            $countSql .= ' AND fecha_hora >= DATE_SUB(NOW(), INTERVAL ' . $intervalo_sql . ')';
+            $sql .= condicionIntervalo('m.fecha_hora', $intervalo);
+            $countSql .= condicionIntervalo('fecha_hora', $intervalo);
             $params = $ids;
             $countParams = $params;
         }
@@ -255,9 +259,11 @@ class ApiController
         $resultado = ['total_registros' => 0];
 
         foreach ($parametros as $p) {
-            $avgs = array_filter(array_map(fn($d) => $d["avg_{$p}"] ?? null, $datos));
-            $maxs = array_filter(array_map(fn($d) => $d["max_{$p}"] ?? null, $datos));
-            $mins = array_filter(array_map(fn($d) => $d["min_{$p}"] ?? null, $datos));
+            // Conservar ceros reales: solo se descartan nulos.
+            $noNulo = fn($v) => $v !== null;
+            $avgs = array_filter(array_map(fn($d) => $d["avg_{$p}"] ?? null, $datos), $noNulo);
+            $maxs = array_filter(array_map(fn($d) => $d["max_{$p}"] ?? null, $datos), $noNulo);
+            $mins = array_filter(array_map(fn($d) => $d["min_{$p}"] ?? null, $datos), $noNulo);
 
             $resultado["avg_{$p}"] = !empty($avgs) ? array_sum($avgs) / count($avgs) : 0;
             $resultado["max_{$p}"] = !empty($maxs) ? max($maxs) : 0;

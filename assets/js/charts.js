@@ -61,11 +61,12 @@ function renderCharts(series, total) {
 
     const hasAnyData = Object.values(series).some(s => s && s.values && s.values.length > 0);
     if (!hasAnyData) {
+        const rango = (typeof textoRango === 'function') ? textoRango() : '';
         container.innerHTML = `
             <div class="card card-placeholder">
                 <div class="card-empty">
                     <i class="fas fa-chart-line"></i>
-                    <p>No hay datos de mediciones en el rango seleccionado</p>
+                    <p>No hay datos de mediciones en el rango seleccionado<br><small>${rango}</small></p>
                 </div>
             </div>`;
         return;

@@ -117,7 +117,7 @@ function filterFakeMediciones(
         '7d'  => strtotime('-7 days'),
         '30d' => strtotime('-30 days'),
     ];
-    $limite = $limites[$intervalo] ?? strtotime('-24 hours');
+    $limite = $intervalo === 'all' ? 0 : ($limites[$intervalo] ?? strtotime('-24 hours'));
 
     $result = array_values(array_filter($todas, function ($m) use ($dispositivosIds, $limite, $fechaInicio, $fechaFin) {
         if (!in_array($m['id_dispositivo'], $dispositivosIds)) return false;

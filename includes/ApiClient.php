@@ -73,6 +73,10 @@ class ApiClient
             return [$desde, $hasta];
         }
 
+        if ($intervalo === 'all') {
+            return [null, null];
+        }
+
         $horas = match ($intervalo) {
             '7d'  => 7 * 24,
             '30d' => 30 * 24,

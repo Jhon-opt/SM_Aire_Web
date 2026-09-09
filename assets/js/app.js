@@ -41,6 +41,33 @@ function getFilters() {
     };
 }
 
+// Texto legible del rango activo (el día fin siempre incluye el día completo).
+function textoRango() {
+    const intervalo = document.getElementById('filterIntervalo').value;
+    if (intervalo === 'custom') {
+        const ini = document.getElementById('filterFechaInicio').value;
+        const fin = document.getElementById('filterFechaFin').value;
+        const fmt = v => {
+            const p = v.split('-');
+            return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : v;
+        };
+        if (ini && fin) return `${fmt(ini)} – ${fmt(fin)} (día completo)`;
+        return 'rango personalizado incompleto';
+    }
+    const nombres = {
+        '24h': 'Últimas 24 horas',
+        '7d': 'Últimos 7 días',
+        '30d': 'Últimos 30 días',
+        'all': 'Todo el historial',
+    };
+    return nombres[intervalo] || intervalo;
+}
+
+function actualizarRangoBadge() {
+    const el = document.getElementById('rangoBadge');
+    if (el) el.textContent = textoRango();
+}
+
 function showLoading() {
     document.getElementById('loadingOverlay').classList.remove('hidden');
 }
@@ -100,6 +127,7 @@ async function onColegioChange() {
 
 function onFilterChange() {
     currentPagina = 1;
+    actualizarRangoBadge();
     loadAllData();
     resetAutoRefresh();
 }
@@ -231,7 +259,7 @@ function renderStats(estadisticas, totalRegistros) {
             <div class="table-responsive">
                 <div class="empty-state">
                     <i class="fas fa-calculator"></i>
-                    <p>No hay estadísticas disponibles</p>
+                    <p>No hay estadísticas en el rango seleccionado<br><small>${textoRango()}</small></p>
                 </div>
             </div>`;
         return;
@@ -283,7 +311,7 @@ function renderTabla(data) {
             <div class="table-responsive">
                 <div class="empty-state">
                     <i class="fas fa-table"></i>
-                    <p>No hay mediciones disponibles</p>
+                    <p>No hay mediciones en el rango seleccionado<br><small>${textoRango()}</small></p>
                 </div>
             </div>`;
         document.getElementById('paginationContainer').innerHTML = '';
@@ -528,6 +556,7 @@ function exportExcel() {
 document.addEventListener('DOMContentLoaded', () => {
     initDarkMode();
     if (document.getElementById('cardsContainer')) {
+        actualizarRangoBadge();
         loadAllData().then(() => startAutoRefresh());
     }
 });

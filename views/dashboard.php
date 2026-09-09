@@ -42,7 +42,7 @@
                 <!-- Filtros -->
                 <section class="filters-section">
                     <div class="filters-header">
-                        <h3><i class="fas fa-filter"></i> Filtros</h3>
+                        <h3><i class="fas fa-filter"></i> Filtros <span class="badge badge-info" id="rangoBadge">Últimos 30 días</span></h3>
                         <button class="btn btn-sm" onclick="resetFilters()">
                             <i class="fas fa-undo"></i> Restablecer
                         </button>
@@ -71,6 +71,7 @@
                                 <option value="24h">Últimas 24 horas</option>
                                 <option value="7d">Últimos 7 días</option>
                                 <option value="30d" selected>Últimos 30 días</option>
+                                <option value="all">Todo el historial</option>
                                 <option value="custom">Personalizado</option>
                             </select>
                         </div>
