@@ -68,6 +68,7 @@ class ExportController
             $rango = match ($intervalo) {
                 '7d'  => 'Últimos 7 días',
                 '30d' => 'Últimos 30 días',
+                'all' => 'Todo el historial',
                 default => 'Últimas 24 horas',
             };
         }
