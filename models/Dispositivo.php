@@ -81,4 +81,20 @@ class Dispositivo
         }
         return $result;
     }
+
+    public static function getByApiKey(string $apiKey): ?array
+    {
+        if ($apiKey === '' || API_MODE || FAKE_MODE) {
+            return null;
+        }
+        try {
+            return Database::fetchOne(
+                'SELECT * FROM dispositivo WHERE api_key = ?',
+                [$apiKey]
+            );
+        } catch (PDOException) {
+            // Columna api_key ausente (migración no aplicada).
+            return null;
+        }
+    }
 }

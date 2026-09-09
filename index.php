@@ -22,6 +22,7 @@ require_once __DIR__ . '/controllers/DashboardController.php';
 require_once __DIR__ . '/controllers/ApiController.php';
 require_once __DIR__ . '/controllers/ExportController.php';
 require_once __DIR__ . '/controllers/DocsController.php';
+require_once __DIR__ . '/controllers/IngestController.php';
 
 $router = new Router();
 
@@ -36,6 +37,8 @@ $router->get('api/estadisticas', [new ApiController(), 'estadisticas']);
 $router->get('api/tabla', [new ApiController(), 'tabla']);
 
 $router->get('export/excel', [new ExportController(), 'excel']);
+
+$router->post('api/ingest', [new IngestController(), 'store']);
 
 $method = $_SERVER['REQUEST_METHOD'];
 $uri = $_GET['url'] ?? '';

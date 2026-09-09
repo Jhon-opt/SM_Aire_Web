@@ -1,6 +1,6 @@
 FROM php:8.2-apache
 
-RUN a2enmod rewrite
+RUN docker-php-ext-install pdo_mysql && a2enmod rewrite
 
 RUN { \
       echo '<Directory /var/www/html/>'; \

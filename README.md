@@ -6,7 +6,7 @@ Dashboard web de calidad del aire. En esta rama el modo por defecto es **MySQL l
 
 ## Requisitos
 
-- PHP 8.1+ con PDO MySQL
+- PHP 8.1+ con PDO MySQL (`pdo_mysql`) habilitado
 - MySQL/MariaDB local (ver `database/schema-cpanel.sql`)
 
 ## Configuración
@@ -27,6 +27,21 @@ Variables de entorno (o `SetEnv` en `.htaccess`, ver ejemplo comentado arriba de
 4. Subir el ZIP de esta rama a `public_html/aire` y extraerlo (que `index.php` quede en la raíz).
 5. Editar el `.htaccess`: descomentar el bloque de arriba y completar `DB_*`.
 6. Probar: `/dashboard`, `/documentacion`, `/documentacion/pdf`.
+
+## Ingesta de sensores (sin API externa)
+
+Los dispositivos envían mediciones con `POST /api/ingest` (solo modo `db`):
+
+1. Importar `database/migration-ingest.sql` en phpMyAdmin (agrega `api_key` a `dispositivo`).
+2. Asignar una clave a cada dispositivo:
+   ```sql
+   UPDATE dispositivo SET api_key='TU_CLAVE' WHERE id_dispositivo=1;
+   ```
+3. El Arduino hace `POST` JSON a `https://TU_SUBDOMINIO/api/ingest`:
+   ```json
+   {"device_key": "TU_CLAVE", "pm2_5": 12.5, "pm10": 30.2, "co": 0.4, "temperatura": 24.3, "humedad": 58}
+   ```
+   Responde `201 {"ok":true,"id":...}`. Sin `device_key` válida → `401`; dato fuera de rango → `400`.
 
 ## Local (Docker)
 

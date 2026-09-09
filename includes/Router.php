@@ -9,6 +9,11 @@ class Router
         $this->routes['GET'][$route] = $handler;
     }
 
+    public function post(string $route, callable $handler): void
+    {
+        $this->routes['POST'][$route] = $handler;
+    }
+
     public function dispatch(string $method, string $uri): void
     {
         $uri = trim(parse_url($uri, PHP_URL_PATH), '/');
