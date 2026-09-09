@@ -12,6 +12,7 @@ if (API_MODE) {
 
 require_once __DIR__ . '/includes/Router.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/markdown.php';
 
 require_once __DIR__ . '/models/Colegio.php';
 require_once __DIR__ . '/models/Dispositivo.php';
@@ -20,10 +21,13 @@ require_once __DIR__ . '/models/Medicion.php';
 require_once __DIR__ . '/controllers/DashboardController.php';
 require_once __DIR__ . '/controllers/ApiController.php';
 require_once __DIR__ . '/controllers/ExportController.php';
+require_once __DIR__ . '/controllers/DocsController.php';
 
 $router = new Router();
 
 $router->get('dashboard', [new DashboardController(), 'index']);
+$router->get('documentacion', [new DocsController(), 'index']);
+$router->get('documentacion/pdf', [new DocsController(), 'pdf']);
 
 $router->get('api/filtros', [new ApiController(), 'filtros']);
 $router->get('api/ultimas', [new ApiController(), 'ultimas']);

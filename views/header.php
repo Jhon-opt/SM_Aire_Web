@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="<?= asset('css/style.css') ?>">
     <link rel="stylesheet" href="<?= asset('css/dark-mode.css') ?>">
+    <link rel="stylesheet" href="<?= asset('css/docs.css') ?>">
     <script>
         const APP_BASE_URL = '<?= BASE_URL ?>';
         const REFRESH_INTERVAL = <?= REFRESH_INTERVAL ?>;
@@ -27,9 +28,13 @@
             </div>
 
             <nav class="sidebar-nav">
-                <a href="<?= BASE_URL ?>/dashboard" class="nav-item active">
+                <a href="<?= BASE_URL ?>/dashboard" class="nav-item <?= ($nav ?? 'dashboard') === 'dashboard' ? 'active' : '' ?>">
                     <i class="fas fa-chart-line"></i>
                     <span>Dashboard</span>
+                </a>
+                <a href="<?= BASE_URL ?>/documentacion" class="nav-item <?= ($nav ?? '') === 'docs' ? 'active' : '' ?>">
+                    <i class="fas fa-book-open"></i>
+                    <span>Documentación</span>
                 </a>
                 <a href="#" class="nav-item" onclick="event.preventDefault(); toggleDarkMode()">
                     <i class="fas fa-moon" id="darkModeIcon"></i>

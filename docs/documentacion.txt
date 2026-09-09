@@ -1,0 +1,408 @@
+# Documentación Técnica — Dispositivo IoT de Monitoreo de Calidad del Aire
+
+> **Versión del documento:** 1.0
+> **Alcance:** Hardware, firmware, comunicación y arquitectura del dispositivo de adquisición de datos de calidad del aire.
+> **Nota general:** Los valores eléctricos y de pines indicados provienen de los datasheets públicos de cada fabricante. Donde exista variación entre módulos/proveedores (por ejemplo, módulos MQ-7 de distintas marcas), se indica explícitamente y se recomienda verificar contra el datasheet del componente físico utilizado.
+
+---
+
+## 1. Introducción al proyecto
+
+El dispositivo es un **nodo de monitoreo de calidad del aire basado en IoT**, diseñado para medir de forma continua variables ambientales relacionadas con la contaminación atmosférica y transmitir esa información a una plataforma web para su almacenamiento, análisis y visualización.
+
+### 1.1 Objetivo principal
+
+Proporcionar mediciones en tiempo (casi) real de **material particulado (PM1.0, PM2.5, PM10)** y **monóxido de carbono (CO)** en un punto físico determinado, con el fin de generar datos útiles para el seguimiento de la calidad del aire.
+
+### 1.2 Variables ambientales medidas
+
+| Variable | Sensor responsable | Unidad |
+|---|---|---|
+| Material particulado PM1.0 | PMS7003 | µg/m³ |
+| Material particulado PM2.5 | PMS7003 | µg/m³ |
+| Material particulado PM10 | PMS7003 | µg/m³ |
+| Concentración relativa de CO | MQ-7 | ppm (estimado, requiere calibración) |
+
+### 1.3 Uso de los datos obtenidos
+
+Los datos recolectados están orientados a:
+
+* Alimentar una base de datos histórica de calidad del aire.
+* Servir de insumo para paneles de visualización (dashboards) en una aplicación web.
+* Permitir análisis de tendencias por ubicación y horario.
+* Apoyar procesos de evaluación ambiental en el marco de un proyecto de monitoreo (por ejemplo, iniciativas relacionadas con salud pública).
+
+### 1.4 Relación con la aplicación web
+
+El dispositivo actúa como **capa de adquisición de datos (edge device)**. No almacena datos de forma permanente ni los visualiza: su función es medir, procesar localmente y transmitir. La aplicación web consume esos datos a través de una API/backend, los persiste en una base de datos y los presenta al usuario final mediante gráficas e indicadores de calidad del aire.
+
+```
+[ Dispositivo IoT ] --(Wi-Fi/HTTP)--> [ API / Backend ] --> [ Base de datos ] --> [ Aplicación web ]
+```
+
+---
+
+## 2. Componentes de hardware
+
+### 2.1 PMS7003 — Sensor de material particulado
+
+| Campo | Detalle |
+|---|---|
+| **Nombre** | PMS7003 |
+| **Fabricante / referencia** | Plantower PMS7003 (familia PMSX003: PMS5003, PMS6003, PMS7003, PMSA003 comparten protocolo) |
+| **Función en el proyecto** | Medir concentración de material particulado en el aire |
+| **Variable que mide** | PM1.0, PM2.5 y PM10 (concentración en µg/m³); también reporta conteo de partículas por tamaño (0.3–10 µm) |
+| **Principio de funcionamiento** | Dispersión de luz láser (light scattering): un haz láser ilumina el flujo de aire aspirado por un microventilador interno; las partículas dispersan la luz y un fotodetector mide la intensidad dispersada, que se correlaciona con tamaño y cantidad de partículas |
+| **Interfaz de comunicación** | UART (TTL), 9600 baudios, 8 bits de datos, sin paridad, 1 bit de parada |
+| **Alimentación** | 4.5 V – 5.5 V DC (típico 5 V) |
+| **Corriente** | ≤ 100 mA en operación activa (ventilador encendido); ≤ 200 µA en standby |
+| **Tipo de señal de salida** | Trama binaria de 32 bytes por lectura, enviada periódicamente por UART |
+| **Pines relevantes** | VCC, GND, TX (salida de datos), RX (entrada de comandos, opcional), SET (activo/reposo), RESET |
+| **Nivel lógico de los pines de datos** | 3.3 V TTL |
+| **Por qué se seleccionó** | Es uno de los sensores láser de bajo costo más documentados y utilizados en proyectos de calidad del aire tipo IoT, con soporte amplio en Arduino/ESP32 y salida digital ya calibrada de fábrica para PM1.0/PM2.5/PM10, lo que evita el procesamiento analógico adicional |
+| **Conexión con Arduino** | TX del PMS7003 → pin RX de un puerto Serial (hardware o SoftwareSerial) del Arduino UNO R4 WiFi; alimentación 5V y GND compartidos |
+| **Consideraciones** | El pin TX entrega 3.3 V; en la mayoría de microcontroladores de 5 V (como el UNO R4) esto se reconoce correctamente como nivel alto, pero **no debe alimentarse el sensor con más de 5.5 V**. El ventilador interno genera vibración/ruido mecánico leve y requiere flujo de aire libre (no obstruir las rejillas de entrada/salida) |
+
+> ⚠️ **Verificar con datasheet:** los valores exactos de corriente y tiempo de respuesta pueden variar levemente entre lotes de fabricación; se recomienda confirmar contra el datasheet oficial de Plantower correspondiente a la unidad adquirida.
+
+---
+
+### 2.2 MQ-7 — Sensor de monóxido de carbono
+
+| Campo | Detalle |
+|---|---|
+| **Nombre** | MQ-7 |
+| **Referencia** | Módulo comercial basado en el sensor semiconductor MQ-7 (elemento sensible SnO₂) |
+| **Función en el proyecto** | Estimar la concentración relativa de monóxido de carbono (CO) en el ambiente |
+| **Variable que mide** | Concentración de CO, típicamente en rango de 20–2000 ppm según datasheet del elemento sensor |
+| **Principio de funcionamiento** | Sensor químico-resistivo: el dióxido de estaño (SnO₂) cambia su resistencia eléctrica en presencia de CO. El módulo requiere un **ciclo de calentamiento alternado**: aprox. 60 s a 5 V (fase de limpieza/alta temperatura) seguido de 90 s a 1.4 V (fase de medición/baja temperatura). La lectura de CO debe tomarse durante la fase de bajo voltaje |
+| **Tipo de señal de salida** | Analógica (pin A0, voltaje proporcional a la resistencia del sensor a través de una resistencia de carga); algunos módulos incluyen salida digital (D0) mediante comparador con potenciómetro de umbral |
+| **Alimentación** | 5 V DC (circuito y calentador); consumo del calentador ≈ 350 mW (aprox. 150 mA en módulos comerciales típicos) |
+| **Pines relevantes** | VCC, GND, A0 (salida analógica), D0 (salida digital, si el módulo lo incluye) |
+| **Por qué se seleccionó** | Es uno de los sensores de bajo costo más accesibles y documentados para detección de CO en proyectos con Arduino, con integración simple mediante una entrada analógica |
+| **Conexión con Arduino** | A0 → entrada analógica del Arduino (p. ej. A0/A1); VCC → 5V; GND → GND |
+| **Consideraciones / precauciones importantes** | • Requiere un **pre-calentamiento inicial (burn-in)** de al menos 24–48 horas para lecturas estables, según el fabricante.<br>• Las lecturas inmediatas tras el encendido no son confiables.<br>• Es un sensor **no calibrado de fábrica**: entrega un voltaje relativo, no una concentración exacta en ppm, salvo que se aplique una curva de calibración propia.<br>• **No debe utilizarse como único mecanismo de seguridad ante intoxicación por CO**; para ese fin existen alarmas certificadas.<br>• El elemento se calienta físicamente durante la operación |
+
+> ⚠️ **Verificar con datasheet:** existen módulos MQ-7 de distintos fabricantes (2, 4 o 6 pines en el sensor crudo, o módulos de 4 pines con circuito de comparador integrado). El manejo del ciclo de calentamiento (controlado por software vs. fijo en 5 V dentro del módulo) **depende de la variante utilizada** y debe confirmarse antes de definir el firmware.
+
+---
+
+### 2.3 Arduino UNO R4 WiFi — Microcontrolador y módulo de comunicación
+
+| Campo | Detalle |
+|---|---|
+| **Nombre** | Arduino UNO R4 WiFi |
+| **Microcontrolador principal** | Renesas RA4M1 (Arm Cortex-M4), 48 MHz |
+| **Módulo de conectividad** | ESP32-S3 (coprocesador dedicado a Wi-Fi y Bluetooth) |
+| **Función en el proyecto** | Adquisición de datos de los sensores, procesamiento local y envío de la información a través de Wi-Fi |
+| **Memoria** | 256 KB Flash, 32 KB SRAM (RA4M1); memoria adicional en el módulo ESP32-S3 |
+| **Voltaje de operación del circuito** | 5 V (compatibilidad con el ecosistema clásico UNO) |
+| **Voltaje de entrada (VIN)** | 6–24 V (recomendado 7–12 V) mediante conector de alimentación; 4.8–5.5 V vía USB-C |
+| **Corriente máxima por pin I/O** | 8 mA |
+| **Pines digitales I/O** | 14 (6 con PWM) |
+| **Entradas analógicas** | 6 (usadas para leer el MQ-7) |
+| **Interfaces de comunicación** | UART (1x), I2C (1x, incluye conector Qwiic), SPI (1x), CAN (requiere transceptor externo), Wi-Fi y BLE (vía ESP32-S3) |
+| **Por qué se seleccionó** | Combina compatibilidad con el ecosistema clásico Arduino UNO (pinout, shields, referencias de proyectos) con conectividad Wi-Fi integrada, evitando la necesidad de un módulo externo (como un ESP8266 separado) para enviar los datos a internet |
+| **Cómo se conecta con los sensores** | El PMS7003 se conecta a un puerto UART (hardware o por software); el MQ-7 se conecta a una entrada analógica; ambos comparten alimentación de 5 V y GND común con la placa |
+| **Consideraciones** | El ESP32-S3 interno opera a 3.3 V y **no debe exponerse directamente a los pines de 5 V del conector Qwiic/ESP header**; esto es manejado internamente por la placa, pero debe tenerse cuidado si se usan esos conectores directamente para otros fines |
+
+> ⚠️ **Verificar con datasheet:** el Arduino UNO R4 WiFi dispone de un único puerto UART por hardware (pines 0/1), que normalmente se comparte con la comunicación USB/depuración. Si se requiere UART dedicado para el PMS7003 sin interferir con la carga de programas o el monitor serie, se recomienda evaluar el uso de una librería de puerto serie por software o confirmar la disponibilidad de UART adicional en la revisión de placa utilizada.
+
+---
+
+### 2.4 Protoboard
+
+| Campo | Detalle |
+|---|---|
+| **Nombre** | Protoboard (breadboard) |
+| **Función en el proyecto** | Permitir el montaje temporal de los componentes y sus conexiones eléctricas sin soldadura |
+| **Qué función cumple** | Proveer buses de alimentación (líneas + y −) y filas de contacto interconectadas para distribuir VCC, GND y señales entre el Arduino y los sensores |
+| **Principio de funcionamiento** | Contactos metálicos internos conectan grupos de orificios (normalmente filas de 5 en la zona central y columnas completas en los buses laterales de alimentación) |
+| **Por qué se seleccionó** | Permite iterar rápidamente el prototipo, corregir conexiones y probar distintas disposiciones sin dañar los componentes mediante soldadura |
+| **Consideraciones** | Verificar la continuidad de los buses de alimentación (algunas protoboards dividen el bus central en dos mitades no conectadas entre sí); revisar que los contactos no estén flojos, lo que puede generar lecturas inestables, especialmente en el MQ-7 (señal analógica sensible al ruido de contacto) |
+
+### 2.5 Jumpers
+
+| Campo | Detalle |
+|---|---|
+| **Nombre** | Cables jumper (macho-macho, y macho-hembra según el punto de conexión) |
+| **Función en el proyecto** | Establecer las conexiones eléctricas entre el Arduino, la protoboard y los sensores |
+| **Por qué se seleccionaron** | Es el método estándar y no permanente para prototipado en protoboard |
+| **Consideraciones** | Usar un color consistente para VCC, GND y señal facilita la verificación visual del montaje y reduce errores de conexión |
+
+---
+
+## 3. Sensores y variables medidas
+
+### 3.1 Material particulado
+
+**¿Qué es el material particulado?**
+El material particulado (PM, por sus siglas en inglés) es una mezcla de partículas sólidas y líquidas suspendidas en el aire, provenientes de fuentes como combustión vehicular, industria, quema de biomasa y polvo.
+
+**Diferencia entre PM1.0, PM2.5 y PM10**
+
+| Fracción | Diámetro aerodinámico | Descripción |
+|---|---|---|
+| PM1.0 | ≤ 1 µm | Partículas ultrafinas, penetran profundamente en el sistema respiratorio |
+| PM2.5 | ≤ 2.5 µm | Partículas finas; principal indicador usado en normativas de calidad del aire |
+| PM10 | ≤ 10 µm | Incluye partículas finas y gruesas (polvo, polen, hollín) |
+
+**¿Por qué PM2.5 es una variable importante?**
+Las partículas PM2.5 son suficientemente pequeñas para alcanzar los alvéolos pulmonares y, en exposición prolongada, se asocian con afectaciones respiratorias y cardiovasculares. Por esta razón es la métrica más utilizada en índices internacionales de calidad del aire (como el AQI).
+
+**¿Cómo obtiene el PMS7003 estas mediciones?**
+Mediante dispersión de luz láser sobre el flujo de aire aspirado por su ventilador interno; procesa la señal óptica internamente y entrega los valores ya convertidos a µg/m³ (y conteo de partículas por tamaño) a través de UART.
+
+**Datos que entrega el sensor**
+
+* Concentración PM1.0, PM2.5 y PM10 en condiciones estándar (CF=1) y en condiciones atmosféricas.
+* Conteo de partículas por volumen para distintos umbrales de tamaño (0.3, 0.5, 1.0, 2.5, 5.0 y 10 µm), según la trama completa del protocolo.
+
+---
+
+### 3.2 Monóxido de carbono
+
+**¿Qué es el CO?**
+El monóxido de carbono es un gas incoloro, inodoro y tóxico, producido por combustión incompleta (vehículos, motores, calefacción a gas, incendios).
+
+**¿Por qué es relevante para la calidad del aire?**
+Es un indicador de procesos de combustión en el entorno y, en concentraciones elevadas, representa un riesgo directo para la salud humana al reducir la capacidad de la sangre para transportar oxígeno.
+
+**¿Cómo funciona conceptualmente el MQ-7?**
+Su elemento sensible (SnO₂) cambia de resistencia eléctrica al entrar en contacto con moléculas de CO. El módulo alterna un ciclo de calentamiento (alta temperatura para "limpiar" la superficie sensible, baja temperatura para la medición) y esta resistencia variable se traduce en un voltaje de salida a través de una resistencia de carga.
+
+**¿Qué tipo de señal entrega?**
+Una señal **analógica** (voltaje continuo proporcional, de forma no lineal, a la concentración de CO), leída mediante una entrada ADC del Arduino.
+
+**¿Cómo se interpreta la lectura?**
+El valor crudo del ADC (0–1023, en un Arduino de 10 bits) debe convertirse primero a voltaje y luego relacionarse con una concentración estimada de CO mediante una curva de calibración específica del sensor (proporcionada como referencia por el fabricante, pero que idealmente debe ajustarse con gas de concentración conocida).
+
+**Limitaciones y necesidad de calibración**
+
+* La relación entre voltaje y ppm de CO **no es lineal** y varía con temperatura, humedad y envejecimiento del sensor.
+* Requiere un tiempo de pre-calentamiento largo (horas) para estabilizarse.
+* Sin calibración, solo debe interpretarse como una **medida relativa/cualitativa**, no como un valor absoluto certificado.
+
+> ⚠️ **Importante:** los sensores de la familia MQ (incluido el MQ-7) **no deben tratarse como instrumentos profesionales de medición** sin un proceso adecuado de calibración y caracterización frente a un patrón de referencia. Su uso en este proyecto es de carácter educativo/prototipo.
+
+---
+
+## 4. Comunicación entre los sensores y Arduino
+
+### 4.1 Flujo general de datos
+
+```
+[PMS7003] --UART--\
+                    >--> [Arduino UNO R4 WiFi] --procesamiento--> [Wi-Fi] --> [API/Servidor] --> [Base de datos] --> [Aplicación web]
+[MQ-7]    --Analógica--/
+```
+
+### 4.2 PMS7003 → Arduino
+
+* **Pines utilizados:** TX del sensor → pin de recepción (RX) de un puerto Serial del Arduino (hardware Serial1 o SoftwareSerial, según disponibilidad y de qué pines se definan en el firmware).
+* **Tipo de comunicación:** UART asíncrona, 9600 baudios.
+* **Cómo recibe el Arduino los datos:** el sensor transmite continuamente tramas de 32 bytes; el firmware debe leer el buffer serial, identificar los bytes de encabezado (0x42, 0x4D) y verificar el checksum antes de aceptar la trama como válida.
+* **Procesamiento de la lectura:** una vez validada la trama, se extraen los campos correspondientes a PM1.0, PM2.5 y PM10 (cada uno codificado en 2 bytes, big-endian) mediante desplazamiento de bits.
+* **Conversión a valores utilizables:** los valores ya vienen en µg/m³ desde el propio sensor; el firmware solo estructura estos datos (por ejemplo, en un objeto JSON) para su envío.
+
+### 4.3 MQ-7 → Arduino
+
+* **Pines utilizados:** salida analógica (A0 del módulo) → una entrada analógica del Arduino (por ejemplo A0 o A1, a definir según el resto del cableado).
+* **Tipo de comunicación:** señal analógica, leída mediante el conversor analógico-digital (ADC) interno del Arduino.
+* **Cómo recibe el Arduino los datos:** mediante la función de lectura analógica del entorno de programación, que entrega un valor entero proporcional al voltaje presente en el pin.
+* **Procesamiento de la lectura:** conversión del valor crudo del ADC a voltaje, y de voltaje a una estimación de concentración de CO mediante la curva de calibración definida para el sensor.
+* **Conversión a valores utilizables:** el resultado final (ppm estimados) es un **valor calculado**, no una lectura directa certificada, y debe documentarse como tal en la aplicación web.
+
+### 4.4 Tabla de conexión (configuración recomendada)
+
+| Componente | Pin del componente | Pin Arduino UNO R4 WiFi | Función |
+|---|---|---|---|
+| PMS7003 | VCC | 5V | Alimentación |
+| PMS7003 | GND | GND | Referencia de tierra |
+| PMS7003 | TX | RX (puerto serial asignado en firmware) | Recepción de datos de PM |
+| PMS7003 | RX | (Opcional, no siempre utilizado) | Envío de comandos al sensor |
+| MQ-7 | VCC | 5V | Alimentación / calentador |
+| MQ-7 | GND | GND | Referencia de tierra |
+| MQ-7 | A0 | Entrada analógica (p. ej. A0) | Lectura de señal de CO |
+| MQ-7 | D0 | Entrada digital (opcional, si se usa umbral) | Alerta por umbral fijo |
+
+> ⚠️ La asignación exacta de pines (por ejemplo, qué pin analógico se usa para el MQ-7, o si el PMS7003 se conecta al UART de hardware o a un puerto serie por software) **depende de la configuración final del firmware** y debe verificarse en el código fuente del proyecto y en el datasheet del Arduino UNO R4 WiFi.
+
+---
+
+## 5. Diagrama de conexión
+
+### 5.1 Representación textual del cableado
+
+```
+                    +5V ────────────────┬───────────────┐
+                                         │               │
+                                    [PMS7003 VCC]   [MQ-7 VCC]
+                                                         │
+                                                    (Calentador + circuito)
+
+                    GND (bus común) ─────┬───────────────┬───── GND Arduino
+                                          │               │
+                                    [PMS7003 GND]    [MQ-7 GND]
+
+  [PMS7003 TX] ───────────────────────────────► [Arduino RX - puerto serial]
+
+  [MQ-7 A0] ───────────────────────────────────► [Arduino A0 - entrada analógica]
+
+  [MQ-7 D0] (opcional) ─────────────────────────► [Arduino pin digital, si se usa umbral]
+```
+
+### 5.2 Explicación del diagrama
+
+1. La **alimentación de 5 V** del Arduino se distribuye por el bus positivo de la protoboard hacia el PMS7003 y el MQ-7.
+2. Todos los componentes comparten una **tierra común (GND)**, distribuida por el bus negativo de la protoboard. Esto es indispensable para que las señales analógicas y digitales tengan una referencia consistente.
+3. El **PMS7003** envía continuamente sus datos por su pin TX hacia el pin de recepción serial del Arduino.
+4. El **MQ-7** entrega una señal analógica variable en su pin A0, leída por una entrada analógica del Arduino.
+5. Si el módulo MQ-7 utilizado incluye salida digital (D0), esta puede conectarse opcionalmente a un pin digital para detección de umbral, de forma independiente a la lectura analógica.
+
+> El diagrama representa una **configuración recomendada de referencia**. La disposición física exacta sobre la protoboard debe adaptarse al espacio disponible y confirmarse contra el datasheet de cada componente antes del montaje final.
+
+---
+
+## 6. Arquitectura del dispositivo
+
+```
+PMS7003 / MQ-7
+      ↓
+Arduino UNO R4 WiFi (adquisición)
+      ↓
+Procesamiento de datos (validación, conversión, estructuración)
+      ↓
+Wi-Fi (ESP32-S3 integrado)
+      ↓
+API / servidor
+      ↓
+Base de datos
+      ↓
+Aplicación web
+      ↓
+Visualización de calidad del aire
+```
+
+**Función de cada etapa:**
+
+* **PMS7003 / MQ-7:** capturan las variables físicas del ambiente (material particulado y señal relacionada con CO).
+* **Arduino UNO R4 WiFi (adquisición):** lee periódicamente ambos sensores mediante sus respectivas interfaces (UART y ADC).
+* **Procesamiento de datos:** valida las tramas recibidas (por ejemplo, checksum del PMS7003), convierte lecturas crudas en valores interpretables y estructura la información en un formato de intercambio (JSON).
+* **Wi-Fi:** el coprocesador ESP32-S3 de la placa establece conexión a la red inalámbrica configurada y gestiona el envío de datos por protocolo HTTP/HTTPS (u otro definido en el firmware).
+* **API / servidor:** recibe las peticiones del dispositivo, valida el contenido y lo entrega a la capa de persistencia.
+* **Base de datos:** almacena el histórico de mediciones asociado a fecha/hora y, si aplica, ubicación del dispositivo.
+* **Aplicación web:** consulta la base de datos (directamente o vía la API) y expone la información al usuario final.
+* **Visualización de calidad del aire:** capa de presentación (gráficas, indicadores, alertas) que traduce los valores numéricos en información comprensible para el usuario.
+
+---
+
+## 7. Montaje físico
+
+> Este procedimiento describe una **secuencia recomendada** de montaje. Los pines específicos utilizados deben confirmarse con el firmware del proyecto y los datasheets de cada componente antes de energizar el circuito.
+
+1. **Preparación de la protoboard:** ubicar la protoboard en una superficie estable; identificar los buses de alimentación (+ y −) y verificar su continuidad.
+2. **Conexión de alimentación:** llevar el pin 5V del Arduino al bus positivo de la protoboard y un pin GND del Arduino al bus negativo.
+3. **Conexión del PMS7003:** conectar VCC del sensor al bus positivo, GND al bus negativo, y el pin TX hacia el pin de recepción serial definido en el Arduino.
+4. **Conexión del MQ-7:** conectar VCC al bus positivo, GND al bus negativo, y el pin de salida analógica (A0) hacia la entrada analógica correspondiente del Arduino.
+5. **Conexión de las señales al Arduino:** revisar que cada jumper de señal (TX del PMS7003 y A0 del MQ-7) llegue al pin correcto según lo definido en el firmware, evitando cruces con los pines de alimentación.
+6. **Verificación de GND y alimentación:** antes de energizar, confirmar con un multímetro (si está disponible) que no existan cortocircuitos entre el bus positivo y negativo.
+7. **Comprobación de las conexiones:** revisar visualmente que cada jumper esté firmemente insertado tanto en el sensor como en la protoboard/Arduino.
+8. **Encendido del dispositivo:** alimentar el Arduino (vía USB-C o conector de alimentación externo) y observar que los sensores enciendan (LED indicador o encendido del ventilador del PMS7003, según el modelo).
+9. **Lectura de los sensores:** ejecutar el firmware de prueba y verificar, mediante el monitor serial, que ambos sensores entreguen datos de forma consistente (incluyendo el periodo de calentamiento del MQ-7).
+10. **Envío de los datos mediante Wi-Fi:** una vez validadas las lecturas locales, confirmar que el Arduino se conecte a la red Wi-Fi configurada y que los datos lleguen correctamente al backend/API.
+
+---
+
+## 8. Flujo de funcionamiento
+
+1. El dispositivo se enciende.
+2. El Arduino inicializa los sensores (configuración de puertos serial y analógicos).
+3. El PMS7003 realiza las mediciones de material particulado.
+4. El MQ-7 realiza la medición correspondiente a la señal relacionada con CO.
+5. El Arduino recibe y procesa los datos (validación de trama UART, lectura de ADC).
+6. Se estructuran los datos en un formato de intercambio (por ejemplo, JSON).
+7. El Arduino se conecta mediante Wi-Fi a la red configurada.
+8. Los datos se envían al backend/API mediante una solicitud HTTP.
+9. El servidor almacena o procesa los datos recibidos.
+10. La aplicación web consulta los datos (en tiempo real o mediante solicitudes periódicas).
+11. Los valores se muestran al usuario en la interfaz de visualización de calidad del aire.
+
+---
+
+## 9. Formato de los datos
+
+Ejemplo de estructura JSON que el Arduino podría enviar al servidor:
+
+```json
+{
+  "device_id": "estacion-01",
+  "pm1_0": 0,
+  "pm2_5": 0,
+  "pm10": 0,
+  "co_raw": 0,
+  "co_ppm_estimado": 0,
+  "timestamp": ""
+}
+```
+
+### 9.1 Descripción de campos
+
+| Campo | Origen | Descripción |
+|---|---|---|
+| `device_id` | Definido en el firmware | Identificador del dispositivo/estación, útil si existen varios nodos |
+| `pm1_0` | **Valor real del sensor** | Concentración de PM1.0 entregada directamente por el PMS7003 (µg/m³) |
+| `pm2_5` | **Valor real del sensor** | Concentración de PM2.5 entregada directamente por el PMS7003 (µg/m³) |
+| `pm10` | **Valor real del sensor** | Concentración de PM10 entregada directamente por el PMS7003 (µg/m³) |
+| `co_raw` | **Valor real del sensor** | Lectura cruda del ADC (o voltaje calculado) proveniente del MQ-7 |
+| `co_ppm_estimado` | **Valor calculado/procesado** | Estimación de concentración de CO en ppm, obtenida al aplicar la curva de calibración sobre `co_raw`; **no es una medición certificada** |
+| `timestamp` | Generado en el dispositivo o en el servidor | Marca de tiempo de la medición; debe definirse si se genera localmente (RTC/NTP) o al momento de la recepción en el servidor |
+
+> El campo `device_id` y la forma exacta de generar `timestamp` (en el dispositivo o en el servidor) son decisiones de implementación que deben ajustarse según el diseño final de la API.
+
+---
+
+## 10. Consideraciones técnicas
+
+| Aspecto | Consideración |
+|---|---|
+| **Alimentación eléctrica** | El sistema completo debe alimentarse con una fuente de 5 V estable capaz de soportar los picos de corriente del ventilador del PMS7003 y el calentador del MQ-7 de forma simultánea |
+| **Consumo** | El consumo conjunto puede acercarse a los 250–300 mA en los momentos de mayor actividad (PMS7003 activo + calentador del MQ-7 en fase alta); debe dimensionarse la fuente con margen |
+| **Ruido eléctrico** | Las lecturas analógicas del MQ-7 son sensibles a ruido de conmutación; se recomienda mantener los cables de señal alejados de fuentes de interferencia y evitar conexiones flojas en la protoboard |
+| **Calibración** | El MQ-7 requiere una curva de calibración propia frente a concentraciones de CO conocidas para producir valores confiables en ppm |
+| **Precisión y limitaciones** | El PMS7003 tiene buena repetibilidad para uso no certificado, pero no reemplaza equipos de referencia regulatoria; el MQ-7 es aún menos preciso sin calibración dedicada |
+| **Tiempo de calentamiento del MQ-7** | Requiere un pre-calentamiento inicial prolongado (del orden de 24–48 horas según el fabricante) antes de considerar sus lecturas estables, además del ciclo de calentamiento por muestra |
+| **Condiciones ambientales** | Humedad, temperatura y flujo de aire afectan tanto al PMS7003 (obstrucción de rejillas) como al MQ-7 (sensibilidad del elemento resistivo) |
+| **Ubicación física de los sensores** | Deben instalarse en un punto representativo del aire ambiente, evitando exposición directa a lluvia, polvo excesivo o fuentes puntuales de calor |
+| **Mantenimiento** | Limpieza periódica de las rejillas del PMS7003 (acumulación de polvo) y verificación del estado del elemento sensible del MQ-7 |
+| **Posibles errores de lectura** | Tramas corruptas en el PMS7003 (detectables por checksum), oscilaciones en la señal del MQ-7 durante el ciclo de calentamiento, desconexión de jumpers |
+| **Seguridad eléctrica** | El MQ-7 alcanza temperaturas elevadas en su elemento calefactor durante la operación; evitar contacto directo y garantizar ventilación adecuada del gabinete |
+| **Diferencias prototipo vs. producción** | El prototipo en protoboard es adecuado para pruebas de laboratorio; un dispositivo de producción debería migrar a una placa soldada (PCB o perfboard), incluir protección contra polvo/humedad (carcasa), y contemplar calibración periódica |
+
+---
+
+## 11. Problemas comunes y solución
+
+| Problema | Posible causa | Solución |
+|---|---|---|
+| PMS7003 no entrega datos | Conexión TX/RX invertida, baudrate incorrecto, alimentación insuficiente | Verificar que TX del sensor llegue al RX del Arduino, confirmar 9600 baudios y medir voltaje de alimentación |
+| MQ-7 entrega valores inestables | Sensor aún en periodo de pre-calentamiento, mala conexión en protoboard, interferencia eléctrica | Esperar el tiempo de calentamiento recomendado, revisar firmeza de las conexiones, alejar cables de fuentes de ruido |
+| Arduino no se conecta al Wi-Fi | Credenciales incorrectas, red fuera de rango, configuración del ESP32-S3 | Verificar SSID/contraseña en el firmware, comprobar intensidad de señal, revisar logs de conexión por el puerto serial |
+| Datos incorrectos | Error en el procesamiento de la trama (checksum fallido) o curva de calibración mal aplicada | Validar el checksum del PMS7003 antes de usar los datos, revisar la fórmula de conversión del MQ-7 |
+| La API no recibe información | Endpoint mal configurado, falla de red, formato JSON inválido | Revisar la URL/puerto del backend, comprobar conectividad a internet, validar el JSON generado por el firmware |
+
+---
+
+## 12. Resumen del dispositivo
+
+El dispositivo integra dos sensores complementarios y un microcontrolador con conectividad inalámbrica para conformar un nodo de monitoreo de calidad del aire:
+
+* El **PMS7003** se encarga de medir material particulado (PM1.0, PM2.5 y PM10) mediante dispersión de luz láser, entregando datos ya procesados por UART.
+* El **MQ-7** se utiliza para estimar la concentración de monóxido de carbono a partir de su señal analógica, sujeta a un ciclo de calentamiento y a la necesidad de calibración.
+* El **Arduino UNO R4 WiFi** funciona como unidad central de adquisición, procesamiento y comunicación, leyendo ambos sensores y transmitiendo los datos estructurados mediante su módulo Wi-Fi integrado (ESP32-S3).
+* La **protoboard** y los **jumpers** permiten realizar las conexiones físicas del prototipo de forma no permanente, facilitando pruebas e iteraciones del diseño.
+* Los datos obtenidos son enviados mediante **Wi-Fi** hacia un backend/API, almacenados en una **base de datos** y finalmente presentados en la **aplicación web** como indicadores de calidad del aire para el usuario final.
+
+---
+
+*Fin del documento.*

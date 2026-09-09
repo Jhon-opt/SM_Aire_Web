@@ -527,5 +527,7 @@ function exportExcel() {
 // ── Init ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     initDarkMode();
-    loadAllData().then(() => startAutoRefresh());
+    if (document.getElementById('cardsContainer')) {
+        loadAllData().then(() => startAutoRefresh());
+    }
 });
