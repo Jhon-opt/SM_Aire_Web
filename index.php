@@ -18,7 +18,9 @@ require_once __DIR__ . '/models/Colegio.php';
 require_once __DIR__ . '/models/Dispositivo.php';
 require_once __DIR__ . '/models/Medicion.php';
 
+require_once __DIR__ . '/controllers/LiaspController.php';
 require_once __DIR__ . '/controllers/DashboardController.php';
+require_once __DIR__ . '/controllers/MapaController.php';
 require_once __DIR__ . '/controllers/ApiController.php';
 require_once __DIR__ . '/controllers/ExportController.php';
 require_once __DIR__ . '/controllers/DocsController.php';
@@ -26,7 +28,11 @@ require_once __DIR__ . '/controllers/IngestController.php';
 
 $router = new Router();
 
+// Portal LIASP-CB (inicio) y sistema SIMCA (monitoreo)
+$router->get('liasp', [new LiaspController(), 'index']);
 $router->get('dashboard', [new DashboardController(), 'index']);
+$router->get('simca', [new DashboardController(), 'index']);
+$router->get('mapa', [new MapaController(), 'index']);
 $router->get('documentacion', [new DocsController(), 'index']);
 $router->get('documentacion/pdf', [new DocsController(), 'pdf']);
 
@@ -35,6 +41,7 @@ $router->get('api/ultimas', [new ApiController(), 'ultimas']);
 $router->get('api/mediciones', [new ApiController(), 'mediciones']);
 $router->get('api/estadisticas', [new ApiController(), 'estadisticas']);
 $router->get('api/tabla', [new ApiController(), 'tabla']);
+$router->get('api/mapa', [new ApiController(), 'mapa']);
 
 $router->get('export/excel', [new ExportController(), 'excel']);
 
@@ -52,7 +59,7 @@ if (!$uri) {
     $uri = trim($requestPath, '/');
 }
 
-$uri = $uri ?: 'dashboard';
+$uri = $uri ?: 'liasp';
 
 try {
     $router->dispatch($method, $uri);

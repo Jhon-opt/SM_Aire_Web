@@ -4,8 +4,6 @@ require_once __DIR__ . '/../includes/XlsxBuilder.php';
 
 class ExportController
 {
-    private const PARAMS = ['pm2_5', 'pm10', 'co', 'co2', 'o3', 'no2', 'temperatura', 'humedad'];
-
     public function excel(): void
     {
         $colegioId = isset($_GET['colegio']) ? sanitize($_GET['colegio'], 'int') : null;
@@ -19,7 +17,7 @@ class ExportController
 
         $filtros = $this->describirFiltros($colegioId, $dispositivoId, $intervalo, $fechaInicio, $fechaFin);
 
-        $fileName = 'mediciones_' . date('Y-m-d_H-i') . '.xlsx';
+        $fileName = 'mediciones_' . ahoraLocal('Y-m-d_H-i') . '.xlsx';
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $fileName . '"');
@@ -79,14 +77,25 @@ class ExportController
                 ? $dispositivo['codigo'] . ' – ' . $dispositivo['modelo'] . ' (' . $dispositivo['ubicacion'] . ')'
                 : 'Todos los dispositivos',
             'rango'       => $rango,
-            'generado'    => date('d/m/Y H:i'),
+            'generado'    => ahoraLocal('d/m/Y H:i') . ' (hora de Colombia)',
         ];
     }
 
     private function buildXlsx(array $data, array $dispositivos, array $filtros): string
     {
+        // Columnas: parámetros principales siempre + opcionales con datos.
+        $parametros = parametrosVisibles($data);
+        $multi = $this->hasMultipleDevices($data);
+
         $builder = new XlsxBuilder('Mediciones');
-        $builder->setColWidths([10, 22, 12, 12, 10, 12, 10, 10, 12, 10, 10]);
+        $anchos = [8, 22];
+        if ($multi) {
+            $anchos[] = 16;
+        }
+        foreach ($parametros as $p) {
+            $anchos[] = 16;
+        }
+        $builder->setColWidths($anchos);
 
         $builder->addRow([['v' => 'Reporte de Mediciones – Calidad del Aire', 's' => 1]]);
 
@@ -100,9 +109,12 @@ class ExportController
 
         $builder->addRow([]);
 
-        $headers = ['#', 'Fecha / Hora', 'PM2.5 (µg/m³)', 'PM10 (µg/m³)', 'CO (ppm)', 'CO2 (ppm)', 'O₃ (ppb)', 'NO₂ (ppb)', 'Temperatura (°C)', 'Humedad (%)'];
-        if ($this->hasMultipleDevices($data)) {
-            array_splice($headers, 1, 0, ['Dispositivo']);
+        $headers = ['#', 'Fecha / Hora (Colombia)'];
+        if ($multi) {
+            $headers[] = 'Dispositivo';
+        }
+        foreach ($parametros as $p) {
+            $headers[] = getParametroNombre($p) . ' (' . getParametroUnidad($p) . ')';
         }
         $builder->addRow(array_map(fn($h) => ['v' => $h, 's' => 3], $headers));
 
@@ -111,7 +123,7 @@ class ExportController
         foreach ($data as $row) {
             $did = (int) $row['id_dispositivo'];
 
-            if ($this->hasMultipleDevices($data) && $did !== $lastDevice) {
+            if ($multi && $did !== $lastDevice) {
                 if ($lastDevice !== null) {
                     $builder->addRow([]);
                 }
@@ -126,10 +138,10 @@ class ExportController
                 ['v' => (string) $idx, 's' => 5],
                 ['v' => formatDate($row['fecha_hora'] ?? null, 'Y-m-d H:i:s'), 's' => 6],
             ];
-            if ($this->hasMultipleDevices($data)) {
-                array_splice($cells, 1, 0, [['v' => ($dispositivos[$did]['codigo'] ?? ''), 's' => 6]]);
+            if ($multi) {
+                $cells[] = ['v' => ($dispositivos[$did]['codigo'] ?? ''), 's' => 6];
             }
-            foreach (self::PARAMS as $p) {
+            foreach ($parametros as $p) {
                 $val = $row[$p] ?? null;
                 $cells[] = $val !== null && $val !== ''
                     ? ['v' => (string) $val, 's' => 5]

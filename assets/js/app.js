@@ -1,5 +1,10 @@
 /* =============================================================
    Air Monitor Dashboard - Aplicación principal
+   - Actualización en tiempo real: consulta la última lectura cada
+     LIVE_POLL_SECONDS y, cuando hay una medición nueva, refresca
+     tarjetas, gráficas, estadísticas y tabla sin recargar la página.
+   - Fechas: la API entrega UTC; aquí se muestran en APP_TIMEZONE
+     (hora de Colombia) sin depender de la zona horaria del navegador.
    ============================================================= */
 const API = {
     filtros: 'api/filtros',
@@ -9,28 +14,154 @@ const API = {
     tabla: 'api/tabla',
 };
 
-let refreshInterval = null;
-let refreshCountdown = 60;
-let currentCharts = {};
-let currentOrden = 'DESC';
-let currentPagina = 1;
+// Metadatos de presentación por parámetro (nombre, unidad, icono, color de gráfica)
+const PARAM_META = {
+    pm2_5:       { nombre: 'PM2.5',       unidad: 'µg/m³', icono: 'fa-wind',             color: '#16A34A' },
+    pm10:        { nombre: 'PM10',        unidad: 'µg/m³', icono: 'fa-smog',             color: '#0D9488' },
+    co:          { nombre: 'CO',          unidad: 'ppm',   icono: 'fa-fire-flame-simple', color: '#CA8A04' },
+    co2:         { nombre: 'CO2',         unidad: 'ppm',   icono: 'fa-cloud',            color: '#7C3AED' },
+    o3:          { nombre: 'O₃',          unidad: 'ppb',   icono: 'fa-sun',              color: '#2563EB' },
+    no2:         { nombre: 'NO₂',         unidad: 'ppb',   icono: 'fa-car',              color: '#EA580C' },
+    temperatura: { nombre: 'Temperatura', unidad: '°C',    icono: 'fa-temperature-half', color: '#F97316' },
+    humedad:     { nombre: 'Humedad',     unidad: '%',     icono: 'fa-droplet',          color: '#0EA5E9' },
+};
 
+const state = {
+    pagina: 1,
+    orden: 'DESC',
+    lastFecha: null,     // fecha_hora (UTC) de la última lectura mostrada
+    liveTimer: null,
+    tickTimer: null,
+    loading: false,
+    liveMode: 'ok',
+};
+
+// ── Utilidades ──────────────────────────────────────────
 async function apiGet(endpoint, params = {}) {
     const url = new URL(APP_BASE_URL + '/' + endpoint);
     Object.entries(params).forEach(([k, v]) => {
         if (v !== null && v !== undefined && v !== '') url.searchParams.set(k, v);
     });
 
-    try {
-        const res = await fetch(url.toString());
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.json();
-    } catch (e) {
-        console.error('API Error:', e);
-        throw e;
-    }
+    const res = await fetch(url.toString(), { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
 }
 
+function escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function formatNum(v) {
+    if (v === null || v === undefined || v === '') return '—';
+    const n = Number(v);
+    if (isNaN(n)) return escapeHtml(v);
+    return String(parseFloat(n.toFixed(2)));
+}
+
+// ── Fechas (UTC de la API -> hora de Colombia) ──────────
+function parseUtc(str) {
+    if (!str) return null;
+    const d = new Date(String(str).replace(' ', 'T') + 'Z');
+    return isNaN(d.getTime()) ? null : d;
+}
+
+const FMT_FECHA = new Intl.DateTimeFormat('es-CO', {
+    timeZone: APP_TIMEZONE, day: '2-digit', month: '2-digit', year: 'numeric',
+});
+const FMT_HORA = new Intl.DateTimeFormat('es-CO', {
+    timeZone: APP_TIMEZONE, hour: '2-digit', minute: '2-digit', hour12: false,
+});
+const FMT_HORA_SEG = new Intl.DateTimeFormat('es-CO', {
+    timeZone: APP_TIMEZONE, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+});
+
+function formatFechaLocal(str, conSegundos = false) {
+    const d = parseUtc(str);
+    if (!d) return '—';
+    return `${FMT_FECHA.format(d)} ${(conSegundos ? FMT_HORA_SEG : FMT_HORA).format(d)}`;
+}
+
+function formatHoraLocal(str) {
+    const d = parseUtc(str);
+    return d ? FMT_HORA.format(d) : '—';
+}
+
+function tiempoRelativo(str) {
+    const d = parseUtc(str);
+    if (!d) return '—';
+    const diff = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000));
+
+    if (diff < 5) return 'ahora mismo';
+    if (diff < 60) return `hace ${diff} s`;
+    if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
+    if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
+    return `hace ${Math.floor(diff / 86400)} d`;
+}
+
+// Refresca todos los "hace X" de la página (se ejecuta cada segundo)
+function actualizarRelativos() {
+    document.querySelectorAll('.rel[data-fecha]').forEach(el => {
+        el.textContent = tiempoRelativo(el.dataset.fecha);
+    });
+    actualizarLiveBadge();
+}
+
+// ── Categorías ICA (espejo de includes/functions.php) ───
+function categoriaDe(param, valor) {
+    if (valor === null || valor === undefined || valor === '') return null;
+    const v = Number(valor);
+    if (isNaN(v)) return null;
+
+    const cats = ICA.categorias;
+
+    if (param === 'temperatura' || param === 'humedad') {
+        const [a, b, c, d] = param === 'temperatura' ? [18, 26, 12, 32] : [30, 60, 20, 80];
+        const etiquetas = ['Confortable', 'Aceptable', 'Extrema'];
+        const i = (v >= a && v <= b) ? 0 : ((v >= c && v <= d) ? 1 : 2);
+        return { ...cats[i], etiqueta: etiquetas[i], indice: i };
+    }
+
+    const lim = ICA.limites[param];
+    if (!lim) return { ...cats[0], indice: 0 };
+
+    let i = lim.length - 1;
+    for (let k = 0; k < lim.length; k++) {
+        if (v <= lim[k]) { i = k; break; }
+    }
+    return { ...cats[i], indice: i };
+}
+
+function catVars(cat) {
+    if (!cat) return '';
+    return `--cat-color:${cat.color};--cat-fondo:${cat.fondo};--cat-texto:${cat.texto}`;
+}
+
+// ── Estado de conexión / errores ────────────────────────
+function showLoading() { document.getElementById('loadingOverlay').classList.remove('hidden'); }
+function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
+
+function setConnectionStatus(connected) {
+    const dot = document.querySelector('.status-dot');
+    const text = document.querySelector('.status-text');
+    if (!dot || !text) return;
+    dot.className = connected ? 'status-dot connected' : 'status-dot disconnected';
+    text.textContent = connected ? 'Conectado' : 'Desconectado';
+}
+
+function showApiError(message) {
+    const banner = document.getElementById('apiErrorBanner');
+    if (!banner) return;
+    document.getElementById('apiErrorText').textContent = message || 'No se pudo conectar con la API.';
+    banner.classList.remove('hidden');
+}
+
+function hideApiError() {
+    const banner = document.getElementById('apiErrorBanner');
+    if (banner) banner.classList.add('hidden');
+}
+
+// ── Filtros ─────────────────────────────────────────────
 function getFilters() {
     return {
         colegio: document.getElementById('filterColegio').value,
@@ -68,68 +199,36 @@ function actualizarRangoBadge() {
     if (el) el.textContent = textoRango();
 }
 
-function showLoading() {
-    document.getElementById('loadingOverlay').classList.remove('hidden');
-}
-
-function hideLoading() {
-    document.getElementById('loadingOverlay').classList.add('hidden');
-}
-
-function setConnectionStatus(connected) {
-    const dot = document.querySelector('.status-dot');
-    const text = document.querySelector('.status-text');
-    if (connected) {
-        dot.className = 'status-dot connected';
-        text.textContent = 'Conectado';
-    } else {
-        dot.className = 'status-dot disconnected';
-        text.textContent = 'Desconectado';
-    }
-}
-
-function showApiError(message) {
-    const banner = document.getElementById('apiErrorBanner');
-    if (!banner) return;
-    document.getElementById('apiErrorText').textContent = message || 'No se pudo conectar con la API.';
-    banner.classList.remove('hidden');
-}
-
-function hideApiError() {
-    const banner = document.getElementById('apiErrorBanner');
-    if (banner) banner.classList.add('hidden');
-}
-
-// ── Filtros ─────────────────────────────────────────────
-async function onColegioChange() {
-    const colegioId = document.getElementById('filterColegio').value;
+// Llena el selector de dispositivos del colegio elegido
+async function cargarDispositivos(colegioId) {
     const select = document.getElementById('filterDispositivo');
     select.innerHTML = '<option value="">Todos los dispositivos</option>';
+    if (!colegioId) return;
 
-    if (colegioId) {
-        try {
-            const data = await apiGet(API.filtros, { colegio: colegioId });
-            if (data.dispositivos) {
-                data.dispositivos.forEach(d => {
-                    const opt = document.createElement('option');
-                    opt.value = d.id_dispositivo;
-                    opt.textContent = `${d.codigo} - ${d.modelo || ''} (${d.ubicacion || ''})`;
-                    select.appendChild(opt);
-                });
-            }
-        } catch (e) {
-            console.error('Error cargando dispositivos:', e);
-        }
+    try {
+        const data = await apiGet(API.filtros, { colegio: colegioId });
+        (data.dispositivos || []).forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.id_dispositivo;
+            opt.textContent = `${d.codigo} - ${d.modelo || ''} (${d.ubicacion || ''})`;
+            select.appendChild(opt);
+        });
+    } catch (e) {
+        console.error('Error cargando dispositivos:', e);
     }
+}
 
+async function onColegioChange() {
+    const colegioId = document.getElementById('filterColegio').value;
+    await cargarDispositivos(colegioId);
     onFilterChange();
 }
 
 function onFilterChange() {
-    currentPagina = 1;
+    state.pagina = 1;
+    state.lastFecha = null;
     actualizarRangoBadge();
-    loadAllData();
-    resetAutoRefresh();
+    loadAllData(true);
 }
 
 function onIntervaloChange() {
@@ -154,7 +253,7 @@ function applyCustomDate() {
 function resetFilters() {
     document.getElementById('filterColegio').value = '';
     document.getElementById('filterDispositivo').innerHTML = '<option value="">Todos los dispositivos</option>';
-    document.getElementById('filterIntervalo').value = '30d';
+    document.getElementById('filterIntervalo').value = '24h';
     document.getElementById('filterFechaInicio').value = '';
     document.getElementById('filterFechaFin').value = '';
     document.querySelectorAll('.filter-date').forEach(el => el.classList.add('hidden'));
@@ -162,31 +261,49 @@ function resetFilters() {
     onFilterChange();
 }
 
-// ── Cards ───────────────────────────────────────────────
-function getLevelClass(level) {
-    return level === 'bueno' ? 'bueno' : level === 'moderado' ? 'moderado' : 'malo';
+// ── Estado general (hero) ───────────────────────────────
+function renderEstado(estado, fecha, origen) {
+    const el = document.getElementById('estadoGeneral');
+    if (!el) return;
+
+    if (!estado) {
+        el.innerHTML = `
+            <div class="status-card status-card-empty">
+                <i class="fas fa-satellite-dish"></i>
+                <p>${fecha ? 'Sin datos suficientes para calcular el estado' : 'Sin lecturas recientes para los filtros seleccionados'}</p>
+            </div>`;
+        return;
+    }
+
+    const origenTxt = origen && origen.dispositivo
+        ? [origen.dispositivo, origen.ubicacion, origen.colegio].filter(Boolean).map(escapeHtml).join(' · ')
+        : '';
+
+    el.innerHTML = `
+        <div class="status-card" style="${catVars(estado)}">
+            <div class="status-head">
+                <div class="status-icon"><i class="fas ${estado.icono}"></i></div>
+                <div>
+                    <div class="status-kicker">Estado general del aire</div>
+                    <div class="status-label">${escapeHtml(estado.etiqueta)}</div>
+                    <div class="status-param">Determinado por <strong>${escapeHtml(estado.parametro)}</strong></div>
+                </div>
+            </div>
+            <div class="status-message">${escapeHtml(estado.mensaje)}</div>
+            <div class="status-foot">
+                <span><i class="far fa-clock"></i><span class="rel" data-fecha="${escapeHtml(fecha)}">${tiempoRelativo(fecha)}</span> · ${formatFechaLocal(fecha, true)}</span>
+                ${origenTxt ? `<span><i class="fas fa-microchip"></i>${origenTxt}</span>` : ''}
+            </div>
+        </div>`;
 }
 
-function getIcon(param) {
-    const icons = {
-        pm2_5: 'fa-wind',
-        pm10: 'fa-smog',
-        co: 'fa-industry',
-        co2: 'fa-dumpster',
-        o3: 'fa-sun',
-        no2: 'fa-car',
-        temperatura: 'fa-temperature-high',
-        humedad: 'fa-droplet',
-    };
-    return icons[param] || 'fa-chart-simple';
-}
-
-function renderCards(tarjetas, fecha) {
+// ── Tarjetas ────────────────────────────────────────────
+function renderCards(tarjetas, fecha, { flash = false } = {}) {
     const container = document.getElementById('cardsContainer');
 
     if (tarjetas === null) {
         container.innerHTML = `
-            <div class="card card-placeholder" colspan="8">
+            <div class="card card-placeholder">
                 <div class="card-empty">
                     <i class="fas fa-exclamation-triangle"></i>
                     <p>No se pudieron cargar los datos</p>
@@ -197,108 +314,110 @@ function renderCards(tarjetas, fecha) {
 
     if (!tarjetas || tarjetas.length === 0) {
         container.innerHTML = `
-            <div class="card card-placeholder" colspan="8">
+            <div class="card card-placeholder">
                 <div class="card-empty">
                     <i class="fas fa-microchip"></i>
-                    <p>${fecha ? 'Sin lecturas recientes para los filtros seleccionados' : 'Selecciona un dispositivo para ver los datos'}</p>
+                    <p>Sin lecturas para los filtros seleccionados</p>
                 </div>
             </div>`;
         return;
     }
 
-    container.innerHTML = tarjetas.map(t => `
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">${t.nombre}</span>
-                <div class="card-icon" style="background: ${t.color}22; color: ${t.color}">
-                    <i class="fas ${getIcon(t.parametro)}"></i>
+    container.innerHTML = tarjetas.map(t => {
+        const cat = t.categoria;
+        const sinDato = t.valor === null || t.valor === undefined;
+        const meta = PARAM_META[t.parametro] || {};
+        const segmentos = cat ? cat.segmentos : 6;
+        const segs = ICA.categorias.slice(0, segmentos).map((c, i) =>
+            `<span class="card-scale-seg ${cat && i === cat.indice ? 'on' : ''}" style="background:${c.color}"></span>`
+        ).join('');
+
+        return `
+            <div class="card ${sinDato ? 'card-nodata' : ''} ${flash ? 'flash' : ''}" style="${catVars(cat)}" data-param="${t.parametro}">
+                <div class="card-header">
+                    <div>
+                        <span class="card-title">${escapeHtml(t.nombre)}</span>
+                        <span class="card-subtitle">${escapeHtml(t.descripcion || '')}</span>
+                    </div>
+                    <div class="card-icon"><i class="fas ${meta.icono || 'fa-chart-simple'}"></i></div>
                 </div>
-            </div>
-            <div class="card-value" style="color: ${t.color}">${t.valor}</div>
-            <div class="card-unit">${t.unidad}</div>
-            <div class="card-date">${t.fecha ? formatDate(t.fecha) : '—'}</div>
-            <div class="card-quality ${getLevelClass(t.nivel)}">
-                <span class="quality-dot" style="background: ${t.color}"></span>
-                ${t.nivel}
-            </div>
-        </div>
-    `).join('');
+                <div class="card-value-row">
+                    <span class="card-value">${sinDato ? '—' : formatNum(t.valor)}</span>
+                    <span class="card-unit">${escapeHtml(t.unidad)}</span>
+                </div>
+                <div class="card-quality"><span class="quality-dot"></span>${cat ? escapeHtml(cat.etiqueta) : 'Sin dato reciente'}</div>
+                <div class="card-scale" title="Posición dentro de la escala ICA">
+                    ${segs}
+                    ${cat ? `<span class="card-scale-marker" style="left:${cat.posicion}%"></span>` : ''}
+                </div>
+                <div class="card-date">
+                    <i class="far fa-clock"></i>
+                    <span class="rel" data-fecha="${escapeHtml(fecha)}">${tiempoRelativo(fecha)}</span>
+                    <span>· ${formatFechaLocal(fecha)}</span>
+                </div>
+            </div>`;
+    }).join('');
 }
 
-function formatDate(dateStr) {
-    const d = new Date(dateStr.replace(' ', 'T') + 'Z');
-    if (isNaN(d.getTime())) return dateStr;
-    const now = new Date();
-    const diff = (now - d) / 1000;
-
-    if (diff < 60) return 'Ahora';
-    if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
-    if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`;
-    return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-// ── Stats ───────────────────────────────────────────────
+// ── Estadísticas ────────────────────────────────────────
 function renderStats(estadisticas, totalRegistros) {
     const container = document.getElementById('statsContainer');
     document.getElementById('totalRegistrosBadge').textContent =
-        `${(totalRegistros || 0).toLocaleString()} registros`;
+        `${(totalRegistros || 0).toLocaleString('es-CO')} registros`;
 
     if (estadisticas === null) {
         container.innerHTML = `
-            <div class="table-responsive">
-                <div class="empty-state">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <p>No se pudieron cargar las estadísticas</p>
-                </div>
-            </div>`;
-        return;
-    }
-
-    if (!estadisticas || estadisticas.length === 0) {
-        container.innerHTML = `
-            <div class="table-responsive">
-                <div class="empty-state">
-                    <i class="fas fa-calculator"></i>
-                    <p>No hay estadísticas en el rango seleccionado<br><small>${textoRango()}</small></p>
-                </div>
-            </div>`;
-        return;
-    }
-
-    container.innerHTML = `
-        <div class="table-responsive">
-            <table class="stats-table">
-                <thead>
-                    <tr>
-                        <th>Parámetro</th>
-                        <th>Promedio</th>
-                        <th>Máximo</th>
-                        <th>Mínimo</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${estadisticas.map(s => `
-                        <tr>
-                            <td><strong>${s.nombre}</strong> <span class="text-light">(${s.unidad})</span></td>
-                            <td class="cell-value">${s.promedio !== null ? s.promedio : '—'}</td>
-                            <td class="cell-value" style="color: #EF4444">${s.maximo !== null ? s.maximo : '—'}</td>
-                            <td class="cell-value" style="color: #10B981">${s.minimo !== null ? s.minimo : '—'}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>`;
-}
-
-// ── Table ───────────────────────────────────────────────
-function renderTablaError() {
-    const container = document.getElementById('tableContainer');
-    container.innerHTML = `
-        <div class="table-responsive">
             <div class="empty-state">
                 <i class="fas fa-exclamation-triangle"></i>
-                <p>No se pudo cargar la tabla</p>
-            </div>
+                <p>No se pudieron cargar las estadísticas</p>
+            </div>`;
+        return;
+    }
+
+    if (!estadisticas || estadisticas.length === 0 || !totalRegistros) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-calculator"></i>
+                <p>No hay estadísticas en el rango seleccionado<br><small>${textoRango()}</small></p>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = `
+        <table class="stats-table">
+            <thead>
+                <tr>
+                    <th>Parámetro</th>
+                    <th>Promedio</th>
+                    <th>Estado (promedio)</th>
+                    <th>Máximo</th>
+                    <th>Mínimo</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${estadisticas.map(s => {
+                    const cat = s.categoria;
+                    return `
+                    <tr>
+                        <td class="stats-param">${escapeHtml(s.nombre)}<small>(${escapeHtml(s.unidad)})</small></td>
+                        <td class="cell-value">${formatNum(s.promedio)}</td>
+                        <td>${cat
+                            ? `<span class="card-quality" style="${catVars(cat)}"><span class="quality-dot"></span>${escapeHtml(cat.etiqueta)}</span>`
+                            : '<span class="text-light">Sin datos</span>'}</td>
+                        <td class="cell-value">${formatNum(s.maximo)}</td>
+                        <td class="cell-value">${formatNum(s.minimo)}</td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>`;
+}
+
+// ── Tabla de mediciones ─────────────────────────────────
+function renderTablaError() {
+    document.getElementById('tableContainer').innerHTML = `
+        <div class="empty-state">
+            <i class="fas fa-exclamation-triangle"></i>
+            <p>No se pudo cargar la tabla</p>
         </div>`;
     document.getElementById('paginationContainer').innerHTML = '';
 }
@@ -308,46 +427,51 @@ function renderTabla(data) {
 
     if (!data.data || data.data.length === 0) {
         container.innerHTML = `
-            <div class="table-responsive">
-                <div class="empty-state">
-                    <i class="fas fa-table"></i>
-                    <p>No hay mediciones en el rango seleccionado<br><small>${textoRango()}</small></p>
-                </div>
+            <div class="empty-state">
+                <i class="fas fa-table"></i>
+                <p>No hay mediciones en el rango seleccionado<br><small>${textoRango()}</small></p>
             </div>`;
         document.getElementById('paginationContainer').innerHTML = '';
         return;
     }
 
-    const cols = ['fecha_hora', 'pm2_5', 'pm10', 'co', 'co2', 'o3', 'no2', 'temperatura', 'humedad'];
-    const headers = ['Fecha/Hora', 'PM2.5', 'PM10', 'CO', 'CO2', 'O₃', 'NO₂', 'Temp', 'Humedad'];
-    const units = ['', 'µg/m³', 'µg/m³', 'ppm', 'ppm', 'ppb', 'ppb', '°C', '%'];
+    // Columnas: principales siempre + opcionales con datos (las decide la API)
+    const cols = data.columnas || ['pm2_5', 'pm10', 'co'];
+    const dispositivos = data.dispositivos || {};
+    const multi = Object.keys(dispositivos).length > 1;
 
     container.innerHTML = `
-        <div class="table-responsive">
-            <table class="data-table">
-                <thead>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th class="sortable" onclick="toggleOrden()">
+                        Fecha / Hora <span class="text-light">(Colombia)</span>
+                        <i class="fas fa-sort-${state.orden === 'DESC' ? 'down' : 'up'}"></i>
+                    </th>
+                    ${multi ? '<th>Dispositivo</th>' : ''}
+                    ${cols.map(c => {
+                        const m = PARAM_META[c] || { nombre: c, unidad: '' };
+                        return `<th>${escapeHtml(m.nombre)} <span class="text-light">(${escapeHtml(m.unidad)})</span></th>`;
+                    }).join('')}
+                </tr>
+            </thead>
+            <tbody>
+                ${data.data.map(row => `
                     <tr>
-                        ${headers.map((h, i) => `
-                            <th onclick="sortTable('${cols[i]}')">
-                                ${h}
-                                ${i === 0 ? `<i class="fas fa-sort-${currentOrden === 'DESC' ? 'down' : 'up'}"></i>` : ''}
-                                ${i > 0 ? '<span class="text-light"> (' + units[i] + ')</span>' : ''}
-                            </th>
-                        `).join('')}
+                        <td class="cell-date">${formatFechaLocal(row.fecha_hora, true)}</td>
+                        ${multi ? `<td class="cell-device">${escapeHtml((dispositivos[row.id_dispositivo] || {}).codigo || row.id_dispositivo)}</td>` : ''}
+                        ${cols.map(c => {
+                            const v = row[c];
+                            if (v === null || v === undefined || v === '') {
+                                return '<td class="cell-value text-light">—</td>';
+                            }
+                            const cat = categoriaDe(c, v);
+                            return `<td class="cell-value"><span class="val-dot" style="background:${cat ? cat.color : ''}"></span>${formatNum(v)}</td>`;
+                        }).join('')}
                     </tr>
-                </thead>
-                <tbody>
-                    ${data.data.map(row => `
-                        <tr>
-                            <td>${formatDate(row.fecha_hora)}</td>
-                            ${cols.slice(1).map(c => `
-                                <td class="cell-value">${row[c] !== null ? row[c] : '—'}</td>
-                            `).join('')}
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>`;
+                `).join('')}
+            </tbody>
+        </table>`;
 
     renderPagination(data);
 }
@@ -392,26 +516,21 @@ function renderPagination(data) {
 }
 
 function goToPage(pagina) {
-    currentPagina = pagina;
-    loadTabla();
-}
-
-function sortTable(col) {
-    currentOrden = currentOrden === 'DESC' ? 'ASC' : 'DESC';
-    document.getElementById('ordenBtn').textContent = currentOrden === 'DESC' ? '↓ Más recientes' : '↑ Más antiguos';
+    state.pagina = pagina;
     loadTabla();
 }
 
 function toggleOrden() {
-    currentOrden = currentOrden === 'DESC' ? 'ASC' : 'DESC';
-    document.getElementById('ordenBtn').textContent = currentOrden === 'DESC' ? '↓ Más recientes' : '↑ Más antiguos';
+    state.orden = state.orden === 'DESC' ? 'ASC' : 'DESC';
+    document.getElementById('ordenBtn').textContent = state.orden === 'DESC' ? '↓ Más recientes' : '↑ Más antiguos';
     loadTabla();
 }
 
-// ── Data Loading ────────────────────────────────────────
-async function loadAllData() {
+// ── Carga de datos ──────────────────────────────────────
+async function loadAllData(showOverlay = true) {
     const filters = getFilters();
-    showLoading();
+    state.loading = true;
+    if (showOverlay) showLoading();
 
     const results = await Promise.allSettled([
         loadUltimas(filters),
@@ -420,43 +539,77 @@ async function loadAllData() {
         loadTabla(filters),
     ]);
 
+    if (typeof actualizarMapa === 'function') actualizarMapa();
+
     const failed = results.filter(r => r.status === 'rejected');
 
     if (failed.length === results.length) {
         setConnectionStatus(false);
+        setLive('offline');
         showApiError('No se pudo conectar con la API. Verifica tu conexión o intenta de nuevo.');
     } else {
         setConnectionStatus(true);
+        setLive('ok');
         hideApiError();
         if (failed.length > 0) {
-            showApiError('Algunos datos no pudieron cargarse. Reintentando en el próximo ciclo…');
+            showApiError('Algunos datos no pudieron cargarse. Se reintentará automáticamente.');
         }
     }
 
+    state.loading = false;
     hideLoading();
 }
 
-async function loadUltimas(filters) {
+// Devuelve true si la lectura recibida es más nueva que la mostrada
+async function loadUltimas(filters, { live = false } = {}) {
     try {
         const data = await apiGet(API.ultimas, filters);
-        renderCards(data.tarjetas, data.fecha);
-        if (data.fecha) {
-            document.getElementById('ultimaActualizacion').textContent = formatDate(data.fecha);
+        const nueva = !!data.fecha && data.fecha !== state.lastFecha;
+        state.lastFecha = data.fecha || null;
+
+        renderCards(data.tarjetas, data.fecha, { flash: live && nueva });
+        renderEstado(data.estado_general, data.fecha, data.origen);
+
+        const ult = document.getElementById('ultimaActualizacion');
+        if (ult) {
+            if (data.fecha) {
+                ult.classList.add('rel');
+                ult.dataset.fecha = data.fecha;
+                ult.textContent = tiempoRelativo(data.fecha);
+            } else {
+                ult.classList.remove('rel');
+                delete ult.dataset.fecha;
+                ult.textContent = '—';
+            }
         }
+
+        const tot = document.getElementById('totalMediciones');
+        if (tot && typeof data.total_mediciones === 'number') {
+            tot.textContent = data.total_mediciones.toLocaleString('es-CO');
+        }
+
+        return nueva;
     } catch (e) {
         console.error('Error loading ultimas:', e);
-        renderCards(null, null);
+        if (!live) {
+            renderCards(null, null);
+            renderEstado(null, null, null);
+        }
         throw e;
     }
 }
 
-async function loadMediciones(filters) {
+async function loadMediciones(filters, { live = false } = {}) {
     try {
         const data = await apiGet(API.mediciones, filters);
-        renderCharts(data.series, data.total);
+        renderCharts(data.series, {
+            parametros: data.parametros,
+            bucketTexto: data.bucket_texto,
+            total: data.total,
+        }, { live });
     } catch (e) {
         console.error('Error loading mediciones:', e);
-        renderCharts(null, 0);
+        if (!live) renderCharts(null, {}, {});
         throw e;
     }
 }
@@ -475,7 +628,7 @@ async function loadEstadisticas(filters) {
 async function loadTabla(filters = null) {
     if (!filters) filters = getFilters();
     try {
-        const data = await apiGet(API.tabla, { ...filters, pagina: currentPagina, orden: currentOrden });
+        const data = await apiGet(API.tabla, { ...filters, pagina: state.pagina, orden: state.orden });
         renderTabla(data);
     } catch (e) {
         console.error('Error loading tabla:', e);
@@ -484,63 +637,81 @@ async function loadTabla(filters = null) {
     }
 }
 
-// ── Auto Refresh ────────────────────────────────────────
-function startAutoRefresh() {
-    stopAutoRefresh();
-    refreshCountdown = REFRESH_INTERVAL || 60;
-    updateCountdown();
-
-    refreshInterval = setInterval(() => {
-        refreshCountdown--;
-        updateCountdown();
-        if (refreshCountdown <= 0) {
-            refreshCountdown = REFRESH_INTERVAL || 60;
-            loadAllData();
-        }
-    }, 1000);
+// ── Actualización en tiempo real ────────────────────────
+function startLive() {
+    stopLive();
+    state.liveTimer = setInterval(liveTick, Math.max(3, LIVE_POLL_SECONDS || 10) * 1000);
+    state.tickTimer = setInterval(actualizarRelativos, 1000);
 }
 
-function stopAutoRefresh() {
-    if (refreshInterval) {
-        clearInterval(refreshInterval);
-        refreshInterval = null;
+function stopLive() {
+    if (state.liveTimer) clearInterval(state.liveTimer);
+    if (state.tickTimer) clearInterval(state.tickTimer);
+    state.liveTimer = state.tickTimer = null;
+}
+
+async function liveTick() {
+    if (document.hidden || state.loading) return;
+
+    const filters = getFilters();
+    state.loading = true;
+    setLive('updating');
+
+    try {
+        const nueva = await loadUltimas(filters, { live: true });
+
+        if (nueva) {
+            // Llegó una medición nueva: refrescar gráficas, estadísticas y,
+            // si el usuario está en la primera página, la tabla.
+            await Promise.allSettled([
+                loadMediciones(filters, { live: true }),
+                loadEstadisticas(filters),
+                state.pagina === 1 ? loadTabla(filters) : Promise.resolve(),
+                typeof actualizarMapa === 'function' ? actualizarMapa() : Promise.resolve(),
+            ]);
+        }
+
+        setConnectionStatus(true);
+        hideApiError();
+        setLive('ok');
+    } catch (e) {
+        setConnectionStatus(false);
+        setLive('offline');
+    } finally {
+        state.loading = false;
     }
 }
 
-function resetAutoRefresh() {
-    refreshCountdown = REFRESH_INTERVAL || 60;
-    updateCountdown();
+function setLive(mode) {
+    state.liveMode = mode;
+    actualizarLiveBadge();
 }
 
-function updateCountdown() {
-    const el = document.getElementById('refreshCountdown');
-    if (el) el.textContent = refreshCountdown;
-}
+function actualizarLiveBadge() {
+    const badge = document.getElementById('liveBadge');
+    const text = document.getElementById('liveText');
+    if (!badge || !text) return;
 
-// ── Sidebar ─────────────────────────────────────────────
-function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
-}
+    let mode = state.liveMode;
+    let label = 'En vivo';
 
-// ── Dark Mode ───────────────────────────────────────────
-function toggleDarkMode() {
-    const html = document.documentElement;
-    const current = html.getAttribute('data-theme');
-    const next = current === 'dark' ? 'light' : 'dark';
-    html.setAttribute('data-theme', next);
-    localStorage.setItem('air-monitor-theme', next);
+    if (mode === 'offline') {
+        label = 'Sin conexión · reintentando';
+    } else if (mode === 'updating') {
+        label = 'Actualizando…';
+    } else if (state.lastFecha) {
+        const d = parseUtc(state.lastFecha);
+        const edad = d ? (Date.now() - d.getTime()) / 1000 : 0;
+        if (edad > 5 * 60) {
+            mode = 'stale';
+            label = `Sin datos nuevos · última ${tiempoRelativo(state.lastFecha)}`;
+        } else {
+            label = `En vivo · última ${tiempoRelativo(state.lastFecha)}`;
+        }
+    }
 
-    const icon = document.getElementById('darkModeIcon');
-    icon.className = next === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-}
-
-function initDarkMode() {
-    const saved = localStorage.getItem('air-monitor-theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const theme = saved || (prefersDark ? 'dark' : 'light');
-    document.documentElement.setAttribute('data-theme', theme);
-    const icon = document.getElementById('darkModeIcon');
-    icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    badge.className = 'badge badge-live' + (mode === 'ok' ? '' : ' ' + mode);
+    text.textContent = label;
 }
 
 function exportExcel() {
@@ -553,10 +724,28 @@ function exportExcel() {
 }
 
 // ── Init ────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-    initDarkMode();
-    if (document.getElementById('cardsContainer')) {
-        actualizarRangoBadge();
-        loadAllData().then(() => startAutoRefresh());
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!document.getElementById('cardsContainer')) return;
+
+    // Llegada desde el mapa u otro enlace: /dashboard?colegio=ID (y opcionalmente &dispositivo=ID)
+    const params = new URLSearchParams(window.location.search);
+    const colegio = params.get('colegio');
+    const selColegio = document.getElementById('filterColegio');
+    if (colegio && selColegio) {
+        selColegio.value = colegio;
+        if (selColegio.value === colegio) {
+            await cargarDispositivos(colegio);
+            const dispositivo = params.get('dispositivo');
+            const selDisp = document.getElementById('filterDispositivo');
+            if (dispositivo && selDisp) selDisp.value = dispositivo;
+        }
     }
+
+    actualizarRangoBadge();
+    loadAllData(true).then(() => startLive());
+
+    // Al volver a la pestaña, consultar de inmediato
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) liveTick();
+    });
 });

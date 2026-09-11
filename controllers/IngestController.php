@@ -77,7 +77,7 @@ class IngestController
             $id = Database::insert('medicion', array_merge(
                 ['id_dispositivo' => (int) $dispositivo['id_dispositivo']],
                 $metricas,
-                ['fecha_hora' => date('Y-m-d H:i:s')]
+                ['fecha_hora' => gmdate('Y-m-d H:i:s')] // siempre UTC
             ));
         } catch (PDOException $e) {
             error_log('Ingest insert error: ' . $e->getMessage());

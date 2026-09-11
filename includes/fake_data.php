@@ -3,13 +3,12 @@
 function getFakeColegios(): array
 {
     return [
-        ['id_colegio' => 1, 'nombre' => 'Colegio San José',       'direccion' => 'Av. Principal 123', 'ciudad' => 'Lima'],
-        ['id_colegio' => 2, 'nombre' => 'Colegio Santa María',    'direccion' => 'Jr. Las Flores 456', 'ciudad' => 'Arequipa'],
-        ['id_colegio' => 3, 'nombre' => 'Colegio Alexander von Humboldt',
-                                                                    'direccion' => 'Calle Los Olivos 789', 'ciudad' => 'Cusco'],
-        ['id_colegio' => 4, 'nombre' => 'Colegio Sagrados Corazones',
-                                                                    'direccion' => 'Av. La Marina 321', 'ciudad' => 'Trujillo'],
-        ['id_colegio' => 5, 'nombre' => 'Colegio Euroamericano',  'direccion' => 'Pasaje El Sol 654', 'ciudad' => 'Piura'],
+        ['id_colegio' => 1, 'nombre' => 'Colegio San José',               'direccion' => 'Localidad de Fontibón', 'ciudad' => 'Bogotá D.C.', 'latitud' => 4.682955, 'longitud' => -74.145167],
+        ['id_colegio' => 2, 'nombre' => 'Colegio Santa María',            'direccion' => 'Localidad de Chapinero', 'ciudad' => 'Bogotá D.C.', 'latitud' => 4.648600, 'longitud' => -74.062800],
+        ['id_colegio' => 3, 'nombre' => 'Colegio Alexander von Humboldt', 'direccion' => 'Localidad de Usaquén',  'ciudad' => 'Bogotá D.C.', 'latitud' => 4.712000, 'longitud' => -74.032000],
+        ['id_colegio' => 4, 'nombre' => 'Colegio Sagrados Corazones',     'direccion' => 'Localidad de Kennedy',  'ciudad' => 'Bogotá D.C.', 'latitud' => 4.628000, 'longitud' => -74.153000],
+        // Sin coordenadas: sirve para probar el aviso de "colegios sin ubicación"
+        ['id_colegio' => 5, 'nombre' => 'Colegio Euroamericano',          'direccion' => 'Localidad de Suba',     'ciudad' => 'Bogotá D.C.', 'latitud' => null,     'longitud' => null],
     ];
 }
 
@@ -31,6 +30,22 @@ function getFakeDispositivos(): array
     ];
 }
 
+/**
+ * Sensores que trae cada modelo (para probar que las variables opcionales
+ * solo se muestren cuando existen datos):
+ *   AirQ-100: PM2.5, PM10 y CO (como el hardware real)
+ *   AirQ-200: + temperatura y humedad
+ *   AirQ-300: todos los parámetros
+ */
+function getFakeSensoresModelo(string $modelo): array
+{
+    return match ($modelo) {
+        'AirQ-100' => ['pm2_5', 'pm10', 'co'],
+        'AirQ-200' => ['pm2_5', 'pm10', 'co', 'temperatura', 'humedad'],
+        default    => ['pm2_5', 'pm10', 'co', 'co2', 'o3', 'no2', 'temperatura', 'humedad'],
+    };
+}
+
 function getFakeMediciones(): array
 {
     static $mediciones;
@@ -43,10 +58,14 @@ function getFakeMediciones(): array
     $segundosEntre = 5400;
 
     $dispositivosActivos = [1, 2, 3, 4, 6, 7, 8, 10, 11, 12];
+    $modelos = [];
+    foreach (getFakeDispositivos() as $d) {
+        $modelos[$d['id_dispositivo']] = $d['modelo'];
+    }
 
     for ($i = 0; $i < $totalPuntos; $i++) {
         $timestamp = $now - ($totalPuntos - $i) * $segundosEntre;
-        $hora = (int) date('G', $timestamp);
+        $hora = (int) (new DateTime('@' . $timestamp))->setTimezone(tzLocal())->format('G');
         $esNoche = $hora < 6 || $hora > 22;
         $esPico = ($hora >= 7 && $hora <= 9) || ($hora >= 17 && $hora <= 20);
         $esMedianoche = $hora >= 0 && $hora <= 4;
@@ -57,9 +76,7 @@ function getFakeMediciones(): array
         $basePm25 = $esMedianoche ? rand(3, 8) : ($esNoche ? rand(5, 15) : ($esPico ? rand(18, 45) : rand(8, 25)));
         $basePm10 = $basePm25 * (1.5 + rand(0, 10) / 10);
 
-        $mediciones[] = [
-            'id_medicion'    => $i + 1,
-            'id_dispositivo' => $did,
+        $valores = [
             'pm2_5'  => round(max(0, $basePm25 + $ruido(30)), 2),
             'pm10'   => round(max(0, $basePm10 + $ruido(50)), 2),
             'co'     => round(max(0, rand(10, 80) / 10 + $ruido(10)), 2),
@@ -68,8 +85,21 @@ function getFakeMediciones(): array
             'no2'    => round(max(0, rand(5, 70) + ($esPico ? rand(10, 40) : 0) + $ruido(15)), 2),
             'temperatura' => round(rand(160, 340) / 10 + $ruido(5), 2),
             'humedad'     => round(rand(250, 850) / 10 + $ruido(10), 2),
-            'fecha_hora'  => date('Y-m-d H:i:s', $timestamp),
         ];
+
+        // Solo los sensores que trae el modelo; el resto queda en null
+        $sensores = getFakeSensoresModelo($modelos[$did] ?? 'AirQ-300');
+        foreach ($valores as $param => $v) {
+            if (!in_array($param, $sensores, true)) {
+                $valores[$param] = null;
+            }
+        }
+
+        $mediciones[] = array_merge(
+            ['id_medicion' => $i + 1, 'id_dispositivo' => $did],
+            $valores,
+            ['fecha_hora' => gmdate('Y-m-d H:i:s', $timestamp)]
+        );
     }
 
     return $mediciones;
@@ -90,7 +120,26 @@ function getFakeUltimaMedicion(?int $idDispositivo, ?int $idColegio): ?array
         return true;
     }));
 
-    return !empty($filtradas) ? $filtradas[array_key_last($filtradas)] : null;
+    if (empty($filtradas)) {
+        return null;
+    }
+
+    $ultima = $filtradas[array_key_last($filtradas)];
+
+    foreach (getFakeDispositivos() as $d) {
+        if ($d['id_dispositivo'] === $ultima['id_dispositivo']) {
+            $ultima['dispositivo_codigo'] = $d['codigo'];
+            $ultima['dispositivo_ubicacion'] = $d['ubicacion'];
+            foreach (getFakeColegios() as $c) {
+                if ($c['id_colegio'] === $d['id_colegio']) {
+                    $ultima['colegio_nombre'] = $c['nombre'];
+                }
+            }
+            break;
+        }
+    }
+
+    return $ultima;
 }
 
 function filterFakeMediciones(
@@ -119,13 +168,14 @@ function filterFakeMediciones(
     ];
     $limite = $intervalo === 'all' ? 0 : ($limites[$intervalo] ?? strtotime('-24 hours'));
 
-    $result = array_values(array_filter($todas, function ($m) use ($dispositivosIds, $limite, $fechaInicio, $fechaFin) {
+    [$fi, $ff] = normalizarRangoFechas($fechaInicio, $fechaFin);
+
+    $result = array_values(array_filter($todas, function ($m) use ($dispositivosIds, $limite, $fi, $ff) {
         if (!in_array($m['id_dispositivo'], $dispositivosIds)) return false;
-        $ts = strtotime($m['fecha_hora']);
-        if ($fechaInicio && $fechaFin) {
-            return $ts >= strtotime($fechaInicio) && $ts <= strtotime($fechaFin . ' 23:59:59');
+        if ($fi !== null) {
+            return $m['fecha_hora'] >= $fi && $m['fecha_hora'] <= $ff;
         }
-        return $ts >= $limite;
+        return strtotime($m['fecha_hora'] . ' UTC') >= $limite;
     }));
 
     usort($result, fn($a, $b) => strtotime($a['fecha_hora']) - strtotime($b['fecha_hora']));
@@ -144,15 +194,18 @@ function getFakeEstadisticas(
 
     if (empty($filtradas)) return [];
 
-    $parametros = ['pm2_5', 'pm10', 'co', 'co2', 'o3', 'no2', 'temperatura', 'humedad'];
     $result = ['total_registros' => count($filtradas)];
 
-    foreach ($parametros as $p) {
-        $vals = array_filter(array_map(fn($m) => $m[$p] ?? null, $filtradas));
+    foreach (parametrosTodos() as $p) {
+        // Conservar ceros reales: solo se descartan nulos.
+        $vals = array_map('floatval', array_filter(
+            array_map(fn($m) => $m[$p] ?? null, $filtradas),
+            'tieneValor'
+        ));
         if (empty($vals)) {
-            $result["avg_{$p}"] = 0;
-            $result["max_{$p}"] = 0;
-            $result["min_{$p}"] = 0;
+            $result["avg_{$p}"] = null;
+            $result["max_{$p}"] = null;
+            $result["min_{$p}"] = null;
         } else {
             $result["avg_{$p}"] = round(array_sum($vals) / count($vals), 2);
             $result["max_{$p}"] = round(max($vals), 2);

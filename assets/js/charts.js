@@ -1,43 +1,168 @@
 /* =============================================================
    Air Monitor Dashboard - Gráficas (Chart.js)
+   - Una gráfica por parámetro; las principales siempre, las
+     opcionales solo cuando tienen datos (lo decide la API).
+   - Franjas de fondo con los rangos del ICA.
+   - En actualizaciones en vivo los datos se reemplazan en la
+     gráfica existente (sin parpadeo ni animación).
    ============================================================= */
 let chartsExpanded = true;
 let lastSeries = null;
+let currentCharts = {};
 let modalChart = null;
+
+const CHART_TEXT = '#56685D';
+const CHART_GRID = '#E9F0EB';
 
 Chart.defaults.font.family = "'Inter', sans-serif";
 Chart.defaults.font.size = 11;
-Chart.defaults.color = '#94A3B8';
+Chart.defaults.color = CHART_TEXT;
 
 function getChartColor(param) {
-    const colors = {
-        pm2_5: '#4F46E5',
-        pm10: '#7C3AED',
-        co: '#F59E0B',
-        co2: '#EF4444',
-        o3: '#10B981',
-        no2: '#F97316',
-        temperatura: '#3B82F6',
-        humedad: '#06B6D4',
-    };
-    return colors[param] || '#4F46E5';
+    return (PARAM_META[param] && PARAM_META[param].color) || '#16A34A';
 }
 
-function getGradient(ctx, color) {
-    const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-    gradient.addColorStop(0, color + '33');
-    gradient.addColorStop(1, color + '02');
+function hexToRgba(hex, alpha) {
+    const h = hex.replace('#', '');
+    const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function getGradient(ctx, color, height) {
+    const gradient = ctx.createLinearGradient(0, 0, 0, height || 220);
+    gradient.addColorStop(0, hexToRgba(color, .28));
+    gradient.addColorStop(1, hexToRgba(color, .02));
     return gradient;
 }
 
-function renderCharts(series, total) {
+// Franjas horizontales con los rangos de cada categoría del ICA
+const icaBandsPlugin = {
+    id: 'icaBands',
+    beforeDatasetsDraw(chart, args, opts) {
+        const limites = opts && opts.limites;
+        if (!limites || !limites.length) return;
+
+        const { ctx, chartArea, scales } = chart;
+        const y = scales.y;
+        if (!chartArea || !y) return;
+
+        ctx.save();
+        let inferior = y.min;
+        limites.forEach((superior, i) => {
+            if (inferior >= y.max) return;
+            const top = y.getPixelForValue(Math.min(superior, y.max));
+            const bottom = y.getPixelForValue(Math.max(inferior, y.min));
+            if (bottom > top) {
+                ctx.fillStyle = hexToRgba(ICA.categorias[i].color, .08);
+                ctx.fillRect(chartArea.left, top, chartArea.right - chartArea.left, bottom - top);
+            }
+            inferior = superior;
+        });
+        ctx.restore();
+    },
+};
+Chart.register(icaBandsPlugin);
+
+function downsample(s, maxPoints) {
+    let labels = s.labels || [];
+    let values = s.values || [];
+    if (labels.length > maxPoints) {
+        const step = Math.ceil(labels.length / maxPoints);
+        labels = labels.filter((_, i) => i % step === 0);
+        values = values.filter((_, i) => i % step === 0);
+    }
+    return { labels, values };
+}
+
+function chartOptions(param, s, { modal = false } = {}) {
+    const limites = s.limites || null;
+
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+            legend: { display: false },
+            icaBands: { limites },
+            tooltip: {
+                backgroundColor: '#fff',
+                titleColor: '#1B2B22',
+                bodyColor: '#56685D',
+                borderColor: '#E1EBE4',
+                borderWidth: 1,
+                padding: 10,
+                cornerRadius: 10,
+                displayColors: false,
+                callbacks: {
+                    title: items => items[0].label,
+                    label: item => {
+                        const cat = (typeof categoriaDe === 'function') ? categoriaDe(param, item.raw) : null;
+                        return `${s.nombre}: ${item.raw} ${s.unidad}` + (cat ? ` · ${cat.etiqueta}` : '');
+                    },
+                },
+            },
+        },
+        scales: {
+            x: {
+                display: true,
+                grid: { color: CHART_GRID, drawBorder: false },
+                ticks: {
+                    color: CHART_TEXT,
+                    maxTicksLimit: modal ? 15 : 8,
+                    maxRotation: 0,
+                    font: { size: modal ? 11 : 10 },
+                },
+            },
+            y: {
+                display: true,
+                grid: { color: CHART_GRID, drawBorder: false },
+                ticks: { color: CHART_TEXT, font: { size: modal ? 11 : 10 } },
+                beginAtZero: param !== 'temperatura',
+                // Mostrar al menos la franja "Buena" completa para dar contexto
+                suggestedMax: limites ? limites[0] : undefined,
+            },
+        },
+        animation: { duration: modal ? 400 : 500, easing: 'easeInOutQuart' },
+    };
+}
+
+function chartDataset(ctx, param, s, values, height) {
+    const color = getChartColor(param);
+    return {
+        label: s.nombre,
+        data: values,
+        borderColor: color,
+        backgroundColor: getGradient(ctx, color, height),
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHitRadius: 10,
+        pointHoverRadius: 4,
+        pointHoverBackgroundColor: color,
+        pointHoverBorderColor: '#fff',
+        pointHoverBorderWidth: 2,
+        fill: true,
+        tension: 0.3,
+    };
+}
+
+function actualizarBucketBadge(meta) {
+    const badge = document.getElementById('bucketBadge');
+    if (!badge) return;
+    if (meta && meta.bucketTexto && meta.total) {
+        badge.textContent = meta.bucketTexto;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+function renderCharts(series, meta = {}, { live = false } = {}) {
     const container = document.getElementById('chartsContainer');
 
-    Object.values(currentCharts).forEach(c => c.destroy());
-    currentCharts = {};
-    lastSeries = series || null;
-
     if (series === null) {
+        destroyCharts();
+        lastSeries = null;
+        actualizarBucketBadge(null);
         container.innerHTML = `
             <div class="card card-placeholder">
                 <div class="card-empty">
@@ -48,170 +173,110 @@ function renderCharts(series, total) {
         return;
     }
 
-    if (!series || Object.keys(series).length === 0) {
-        container.innerHTML = `
-            <div class="card card-placeholder">
-                <div class="card-empty">
-                    <i class="fas fa-chart-line"></i>
-                    <p>No hay datos de mediciones disponibles</p>
-                </div>
-            </div>`;
-        return;
-    }
+    const params = (meta.parametros && meta.parametros.length) ? meta.parametros : Object.keys(series || {});
+    lastSeries = series || null;
+    actualizarBucketBadge(meta);
 
-    const hasAnyData = Object.values(series).some(s => s && s.values && s.values.length > 0);
+    const hasAnyData = params.some(p => series[p] && series[p].values && series[p].values.length > 0);
     if (!hasAnyData) {
+        destroyCharts();
         const rango = (typeof textoRango === 'function') ? textoRango() : '';
         container.innerHTML = `
             <div class="card card-placeholder">
                 <div class="card-empty">
                     <i class="fas fa-chart-line"></i>
-                    <p>No hay datos de mediciones en el rango seleccionado<br><small>${rango}</small></p>
+                    <p>No hay mediciones en el rango seleccionado<br><small>${rango}</small></p>
                 </div>
             </div>`;
         return;
     }
 
-    const paramOrder = ['pm2_5', 'pm10', 'co', 'co2', 'o3', 'no2', 'temperatura', 'humedad'];
+    // Actualización en vivo con el mismo conjunto de gráficas: reemplazar datos sin redibujar todo
+    const existentes = Object.keys(currentCharts);
+    const mismoConjunto = live
+        && existentes.length === params.length
+        && params.every(p => currentCharts[p] || (series[p] && series[p].values.length === 0 && document.getElementById(`chart-empty-${p}`)));
 
-    container.innerHTML = paramOrder.map(p => {
+    if (mismoConjunto && params.every(p => currentCharts[p] ? series[p].values.length > 0 : true)) {
+        params.forEach(p => {
+            const ch = currentCharts[p];
+            if (!ch) return;
+            const { labels, values } = downsample(series[p], 600);
+            ch.data.labels = labels;
+            ch.data.datasets[0].data = values;
+            ch.update('none');
+            const badge = document.getElementById(`chart-points-${p}`);
+            if (badge) badge.textContent = `${series[p].values.length} puntos`;
+        });
+        return;
+    }
+
+    destroyCharts();
+
+    container.innerHTML = params.map(p => {
         const s = series[p];
-        if (!s || !s.values || s.values.length === 0) return '';
-
         const color = getChartColor(p);
+        const meta = PARAM_META[p] || {};
+        const nombre = (s && s.nombre) || meta.nombre || p;
+        const unidad = (s && s.unidad) || meta.unidad || '';
+        const tiene = s && s.values && s.values.length > 0;
+
         return `
             <div class="chart-card">
                 <div class="chart-card-header">
                     <span class="chart-card-title">
-                        <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};margin-right:.5rem"></span>
-                        ${s.nombre} (${s.unidad})
+                        <span class="chart-color" style="background:${color}"></span>
+                        ${nombre} <small>(${unidad})</small>
                     </span>
                     <span class="chart-card-actions">
-                        <span class="chart-card-status" style="background:${color}15;color:${color}">
-                            ${s.values.length} puntos
-                        </span>
+                        <span class="chart-card-status" id="chart-points-${p}">${tiene ? `${s.values.length} puntos` : 'sin datos'}</span>
+                        ${tiene ? `
                         <button class="chart-expand-btn" onclick="openChartModal('${p}')" title="Agrandar gráfica">
                             <i class="fas fa-expand"></i>
-                        </button>
+                        </button>` : ''}
                     </span>
                 </div>
-                <div class="chart-wrapper">
-                    <canvas id="chart-${p}"></canvas>
-                </div>
+                ${tiene
+                    ? `<div class="chart-wrapper"><canvas id="chart-${p}"></canvas></div>`
+                    : `<div class="chart-empty" id="chart-empty-${p}"><i class="fas fa-chart-line"></i>Sin datos en este rango</div>`}
             </div>`;
     }).join('');
 
     container.querySelectorAll('[id^="chart-"]').forEach(canvas => {
+        if (canvas.tagName !== 'CANVAS') return;
         const param = canvas.id.replace('chart-', '');
         const s = series[param];
         if (!s || !s.values || s.values.length === 0) return;
 
         const ctx = canvas.getContext('2d');
-        const color = getChartColor(param);
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        const labelColor = isDark ? '#94A3B8' : '#64748B';
-        const gridColor = isDark ? '#334155' : '#E2E8F0';
-
-        // Downsample for performance if too many points
-        let labels = s.labels;
-        let values = s.values;
-        const maxPoints = 200;
-        if (labels.length > maxPoints) {
-            const step = Math.ceil(labels.length / maxPoints);
-            labels = labels.filter((_, i) => i % step === 0);
-            values = values.filter((_, i) => i % step === 0);
-        }
+        const { labels, values } = downsample(s, 600);
 
         currentCharts[param] = new Chart(ctx, {
             type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: s.nombre,
-                    data: values,
-                    borderColor: color,
-                    backgroundColor: getGradient(ctx, color),
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    pointHitRadius: 10,
-                    pointHoverRadius: 4,
-                    pointHoverBackgroundColor: color,
-                    pointHoverBorderColor: '#fff',
-                    pointHoverBorderWidth: 2,
-                    fill: true,
-                    tension: 0.3,
-                }],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    intersect: false,
-                    mode: 'index',
-                },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: isDark ? '#1E293B' : '#fff',
-                        titleColor: isDark ? '#E2E8F0' : '#1E293B',
-                        bodyColor: isDark ? '#94A3B8' : '#64748B',
-                        borderColor: isDark ? '#334155' : '#E2E8F0',
-                        borderWidth: 1,
-                        padding: 10,
-                        cornerRadius: 8,
-                        displayColors: false,
-                        callbacks: {
-                            title: function(items) {
-                                return items[0].label;
-                            },
-                            label: function(item) {
-                                return `${s.nombre}: ${item.raw} ${s.unidad}`;
-                            },
-                        },
-                    },
-                },
-                scales: {
-                    x: {
-                        display: true,
-                        grid: { color: gridColor, drawBorder: false },
-                        ticks: {
-                            color: labelColor,
-                            maxTicksLimit: 10,
-                            maxRotation: 0,
-                            font: { size: 10 },
-                        },
-                    },
-                    y: {
-                        display: true,
-                        grid: { color: gridColor, drawBorder: false },
-                        ticks: {
-                            color: labelColor,
-                            font: { size: 10 },
-                        },
-                        beginAtZero: param === 'temperatura' ? false : true,
-                    },
-                },
-                animation: {
-                    duration: 500,
-                    easing: 'easeInOutQuart',
-                },
-            },
+            data: { labels, datasets: [chartDataset(ctx, param, s, values, 220)] },
+            options: chartOptions(param, s),
         });
     });
 }
 
+function destroyCharts() {
+    Object.values(currentCharts).forEach(c => c.destroy());
+    currentCharts = {};
+}
+
 function toggleAllCharts() {
     chartsExpanded = !chartsExpanded;
-    const charts = document.querySelectorAll('.chart-card');
-    charts.forEach(c => {
-        c.style.display = chartsExpanded ? '' : 'none';
-    });
-    // Re-trigger animation
     document.querySelectorAll('.chart-card').forEach((el, i) => {
-        el.style.animation = 'none';
-        el.offsetHeight;
-        el.style.animation = `fadeIn .4s ease ${i * 0.05}s forwards`;
+        el.style.display = chartsExpanded ? '' : 'none';
+        if (chartsExpanded) {
+            el.style.animation = 'none';
+            el.offsetHeight;
+            el.style.animation = `fadeIn .4s ease ${i * 0.05}s forwards`;
+        }
     });
+    if (chartsExpanded) {
+        Object.values(currentCharts).forEach(c => c.resize());
+    }
 }
 
 // ── Modal de gráfica expandida ───────────────────────────
@@ -244,23 +309,9 @@ function openChartModal(param) {
         });
     }
 
-    const color = getChartColor(param);
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const labelColor = isDark ? '#94A3B8' : '#64748B';
-    const gridColor = isDark ? '#334155' : '#E2E8F0';
-
     document.querySelector('.chart-modal-title').textContent = `${s.nombre} (${s.unidad})`;
 
-    // Downsample suave solo para datasets muy grandes, para no saturar el render
-    let labels = s.labels;
-    let values = s.values;
-    const maxPoints = 1500;
-    if (labels.length > maxPoints) {
-        const step = Math.ceil(labels.length / maxPoints);
-        labels = labels.filter((_, i) => i % step === 0);
-        values = values.filter((_, i) => i % step === 0);
-    }
-
+    const { labels, values } = downsample(s, 1500);
     const canvas = document.getElementById('chartModalCanvas');
     const ctx = canvas.getContext('2d');
 
@@ -268,78 +319,8 @@ function openChartModal(param) {
 
     modalChart = new Chart(ctx, {
         type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: s.nombre,
-                data: values,
-                borderColor: color,
-                backgroundColor: getGradient(ctx, color),
-                borderWidth: 2,
-                pointRadius: 0,
-                pointHitRadius: 10,
-                pointHoverRadius: 4,
-                pointHoverBackgroundColor: color,
-                pointHoverBorderColor: '#fff',
-                pointHoverBorderWidth: 2,
-                fill: true,
-                tension: 0.3,
-            }],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                intersect: false,
-                mode: 'index',
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: isDark ? '#1E293B' : '#fff',
-                    titleColor: isDark ? '#E2E8F0' : '#1E293B',
-                    bodyColor: isDark ? '#94A3B8' : '#64748B',
-                    borderColor: isDark ? '#334155' : '#E2E8F0',
-                    borderWidth: 1,
-                    padding: 10,
-                    cornerRadius: 8,
-                    displayColors: false,
-                    callbacks: {
-                        title: function(items) {
-                            return items[0].label;
-                        },
-                        label: function(item) {
-                            return `${s.nombre}: ${item.raw} ${s.unidad}`;
-                        },
-                    },
-                },
-            },
-            scales: {
-                x: {
-                    display: true,
-                    grid: { color: gridColor, drawBorder: false },
-                    ticks: {
-                        color: labelColor,
-                        maxTicksLimit: 15,
-                        maxRotation: 0,
-                        font: { size: 11 },
-                    },
-                },
-                y: {
-                    display: true,
-                    grid: { color: gridColor, drawBorder: false },
-                    ticks: {
-                        color: labelColor,
-                        font: { size: 11 },
-                    },
-                    beginAtZero: param === 'temperatura' ? false : true,
-                },
-            },
-            animation: {
-                duration: 400,
-                easing: 'easeInOutQuart',
-            },
-        },
+        data: { labels, datasets: [chartDataset(ctx, param, s, values, 600)] },
+        options: chartOptions(param, s, { modal: true }),
     });
 
     overlay.classList.remove('hidden');

@@ -33,9 +33,13 @@ class Medicion
             return $row ?: [];
         }
 
-        $sql = "SELECT m.*
+        $sql = "SELECT m.*,
+                       d.codigo    AS dispositivo_codigo,
+                       d.ubicacion AS dispositivo_ubicacion,
+                       c.nombre    AS colegio_nombre
                 FROM medicion m
-                JOIN dispositivo d ON m.id_dispositivo = d.id_dispositivo";
+                JOIN dispositivo d ON m.id_dispositivo = d.id_dispositivo
+                LEFT JOIN colegio c ON d.id_colegio = c.id_colegio";
         $params = [];
         $conditions = [];
 
@@ -219,19 +223,62 @@ class Medicion
         ];
     }
 
+    /**
+     * Parámetros opcionales que tienen al menos un dato en el rango, para un
+     * conjunto de dispositivos (solo modo db; los otros modos lo calculan en memoria).
+     */
+    public static function opcionalesConDatos(
+        array $ids,
+        string $intervalo = '24h',
+        ?string $fechaInicio = null,
+        ?string $fechaFin = null
+    ): array {
+        if (empty($ids)) {
+            return [];
+        }
+
+        $selects = [];
+        foreach (parametrosOpcionales() as $p) {
+            $selects[] = "COUNT({$p}) AS n_{$p}";
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $sql = "SELECT " . implode(', ', $selects) . " FROM medicion WHERE id_dispositivo IN ({$placeholders})";
+        $params = array_values($ids);
+
+        [$fi, $ff] = normalizarRangoFechas($fechaInicio, $fechaFin);
+        if ($fi !== null) {
+            $sql .= ' AND fecha_hora >= ? AND fecha_hora <= ?';
+            $params[] = $fi;
+            $params[] = $ff;
+        } else {
+            $sql .= condicionIntervalo('fecha_hora', $intervalo);
+        }
+
+        $row = Database::fetchOne($sql, $params) ?: [];
+
+        return array_values(array_filter(
+            parametrosOpcionales(),
+            fn($p) => (int) ($row["n_{$p}"] ?? 0) > 0
+        ));
+    }
+
     private static function computarEstadisticas(array $filtradas): array
     {
         if (empty($filtradas)) return [];
 
-        $parametros = ['pm2_5', 'pm10', 'co', 'co2', 'o3', 'no2', 'temperatura', 'humedad'];
         $result = ['total_registros' => count($filtradas)];
 
-        foreach ($parametros as $p) {
-            $vals = array_filter(array_map(fn($m) => $m[$p] ?? null, $filtradas));
+        foreach (parametrosTodos() as $p) {
+            // Conservar ceros reales: solo se descartan nulos.
+            $vals = array_map('floatval', array_filter(
+                array_map(fn($m) => $m[$p] ?? null, $filtradas),
+                'tieneValor'
+            ));
             if (empty($vals)) {
-                $result["avg_{$p}"] = 0;
-                $result["max_{$p}"] = 0;
-                $result["min_{$p}"] = 0;
+                $result["avg_{$p}"] = null;
+                $result["max_{$p}"] = null;
+                $result["min_{$p}"] = null;
             } else {
                 $result["avg_{$p}"] = round(array_sum($vals) / count($vals), 2);
                 $result["max_{$p}"] = round(max($vals), 2);

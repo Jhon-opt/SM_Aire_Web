@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS colegio (
     id_colegio  INT AUTO_INCREMENT PRIMARY KEY,
     nombre      VARCHAR(255) NOT NULL,
     direccion   VARCHAR(500) DEFAULT NULL,
-    ciudad      VARCHAR(100) DEFAULT NULL
+    ciudad      VARCHAR(100) DEFAULT NULL,
+    latitud     DECIMAL(9,6) DEFAULT NULL,
+    longitud    DECIMAL(9,6) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================

@@ -17,7 +17,7 @@ class Router
     public function dispatch(string $method, string $uri): void
     {
         $uri = trim(parse_url($uri, PHP_URL_PATH), '/');
-        $uri = $uri ?: 'dashboard';
+        $uri = $uri ?: 'liasp';
 
         if (isset($this->routes[$method][$uri])) {
             call_user_func($this->routes[$method][$uri]);
