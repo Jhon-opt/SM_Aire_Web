@@ -89,7 +89,7 @@ $activo = $navActivo ?? ($nav === 'dashboard' ? 'consolidado' : $nav);
                                 </div>
                             </div>
                         <?php elseif ($tipo === 'accion'): ?>
-                            <button type="button" class="<?= $clases ?>" onclick="<?= $item['onclick'] ?>"><?= $etiqueta ?></button>
+                            <button type="button" class="<?= $clases ?>" onclick="<?= htmlspecialchars($item['onclick'], ENT_QUOTES) ?>"><?= $etiqueta ?></button>
                         <?php elseif ($tipo === 'pronto'): ?>
                             <span class="<?= $clases ?> nav-disabled" title="Próximamente"><?= $etiqueta ?> <span class="nav-badge-soon">Pronto</span></span>
                         <?php else: ?>

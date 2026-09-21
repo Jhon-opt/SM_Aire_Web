@@ -13,6 +13,7 @@ if (API_MODE) {
 require_once __DIR__ . '/includes/Router.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/markdown.php';
+require_once __DIR__ . '/includes/contenido.php';
 
 require_once __DIR__ . '/models/Colegio.php';
 require_once __DIR__ . '/models/Dispositivo.php';

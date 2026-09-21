@@ -11,35 +11,29 @@ class LiaspController
     public function index(): void
     {
         $contenido = [
-            'lema' => 'Ciencia de datos, sensores de bajo costo y salud pública para entender el aire que respiramos.',
+            'lema' => 'Datos, inteligencia artificial y participación comunitaria para comprender la relación entre el ambiente y la salud en Ciudad Bolívar.',
 
+            // Resumen de la sección "Información" (el documento completo se abre en la ventana emergente)
             'descripcion' => [
-                'El Laboratorio Urbano de Inteligencia Ambiental y Salud Pública (LIASP-CB) de la Universidad Distrital '
-                . 'Francisco José de Caldas integra sensores de bajo costo, ciencia de datos y salud pública para observar, '
-                . 'comprender y mejorar el ambiente urbano.',
-                'Trabajamos con instituciones educativas y comunidades para generar información abierta y en tiempo real '
-                . 'que apoye la toma de decisiones sobre calidad del aire y salud.',
+                'El LIASP-CB es una iniciativa de la Universidad Distrital Francisco José de Caldas, impulsada por los grupos de investigación Metis, Digiti, Greece y Armónico, concebida como un laboratorio urbano o living lab de carácter interinstitucional, interdisciplinario y territorial.',
+                'Opera como una infraestructura permanente para la captura, integración, gestión, análisis, visualización y uso de datos ambientales, sanitarios, sociales y territoriales de Ciudad Bolívar, y devuelve sus resultados a las entidades responsables, las instituciones educativas y la comunidad mediante alertas, tableros de control, mapas y recomendaciones.',
             ],
 
             'destacados' => [
-                ['icono' => 'fa-microchip',      'titulo' => 'Sensores de bajo costo', 'texto' => 'Dispositivos IoT diseñados y calibrados por el laboratorio.'],
-                ['icono' => 'fa-chart-line',     'titulo' => 'Datos abiertos',         'texto' => 'Mediciones en tiempo real, históricos y exportación para investigación.'],
-                ['icono' => 'fa-heart-pulse',    'titulo' => 'Salud pública',          'texto' => 'Índices y recomendaciones basados en la normativa colombiana (ICA).'],
+                ['icono' => 'fa-layer-group',   'titulo' => 'Siete capas funcionales',      'texto' => 'Captura, integración, analítica e IA, visualización, alertas, intervención y evaluación, que operan de manera articulada.'],
+                ['icono' => 'fa-school',        'titulo' => 'Colegios como nodos',           'texto' => 'Las instituciones educativas de Ciudad Bolívar actúan como nodos de monitoreo, formación y ciencia ciudadana.'],
+                ['icono' => 'fa-heart-pulse',   'titulo' => 'Ambiente y salud pública',     'texto' => 'Evidencia para alertas tempranas, políticas públicas y soluciones que mejoren la salud y la calidad de vida del territorio.'],
             ],
 
-            // Las 4 tarjetas de "Líneas de trabajo" (edítalas libremente)
-            'lineas' => [
-                ['icono' => 'fa-wind',            'titulo' => 'Calidad del aire urbano',     'texto' => 'Monitoreo de material particulado y gases con redes de sensores de bajo costo.'],
-                ['icono' => 'fa-heart-pulse',     'titulo' => 'Salud pública y ambiente',   'texto' => 'Relación entre exposición ambiental y salud en entornos escolares y comunitarios.'],
-                ['icono' => 'fa-brain',           'titulo' => 'Inteligencia ambiental',     'texto' => 'Analítica de datos, calibración de sensores y modelos para la toma de decisiones.'],
-                ['icono' => 'fa-people-group',    'titulo' => 'Ciudad y comunidad',         'texto' => 'Apropiación social del conocimiento con colegios, barrios y entidades públicas.'],
-            ],
+            // Líneas de trabajo del documento conceptual (una tarjeta cada una)
+            'lineas_intro' => lineasTrabajoIntro(),
+            'lineas'       => lineasTrabajo(),
 
             'proyectos' => [
                 [
                     'sigla'  => 'SIMCA',
                     'nombre' => 'Sistema Inteligente de Monitoreo de Calidad del Aire basado en sensores de bajo costo',
-                    'texto'  => 'Red de sensores instalados en colegios que mide PM2.5, PM10 y CO, con un panel de monitoreo en tiempo real, estadísticas y exportación de datos.',
+                    'texto'  => 'Red distribuida de nodos de bajo costo instalados en instituciones educativas que mide PM2.5, PM10 y CO, con transmisión automática al servidor y un panel público en tiempo casi real con estadísticas, mapa y exportación de datos.',
                     'href'   => BASE_URL . '/dashboard',
                     'estado' => 'En operación',
                     'icono'  => 'fa-wind',
@@ -47,9 +41,11 @@ class LiaspController
             ],
 
             'colaboradores' => [
-                ['nombre' => 'Universidad Distrital Francisco José de Caldas', 'rol' => 'Institución', 'logo' => asset('img/logo-ud.png'), 'href' => 'https://www.udistrital.edu.co'],
-                ['nombre' => 'Instituciones educativas participantes',        'rol' => 'Colegios',    'icono' => 'fa-school'],
-                ['nombre' => 'Por definir',                                    'rol' => 'Colaborador', 'icono' => 'fa-handshake'],
+                ['nombre' => 'Universidad Distrital Francisco José de Caldas',        'rol' => 'Institución',            'logo' => asset('img/logo-ud.png'), 'href' => 'https://www.udistrital.edu.co'],
+                ['nombre' => 'Grupos de investigación Metis, Digiti, Greece y Armónico', 'rol' => 'Impulsan el laboratorio', 'icono' => 'fa-flask'],
+                ['nombre' => 'Secretaría Distrital de Ambiente',                      'rol' => 'Actor del territorio',    'icono' => 'fa-leaf'],
+                ['nombre' => 'Subred Integrada de Servicios de Salud Sur',            'rol' => 'Actor del territorio',    'icono' => 'fa-hospital'],
+                ['nombre' => 'Instituciones educativas de Ciudad Bolívar',            'rol' => 'Nodos de monitoreo',      'icono' => 'fa-school'],
             ],
 
             // Deja en '' lo que aún no esté definido; se mostrará "Por definir".
@@ -76,7 +72,7 @@ class LiaspController
         $portada = file_exists(BASE_PATH . '/assets/img/portada.jpg') ? asset('img/portada.jpg') : null;
 
         view('header', [
-            'titulo'    => 'LIASP-CB · Laboratorio Urbano de Inteligencia Ambiental y Salud Pública',
+            'titulo'    => 'LIASP-CB · Laboratorio Urbano de Inteligencia Ambiental y de Salud Pública para Ciudad Bolívar',
             'nav'       => 'liasp',
             'sitio'     => 'liasp',
             'navActivo' => 'home',

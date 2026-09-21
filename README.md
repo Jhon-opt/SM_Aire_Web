@@ -38,6 +38,12 @@ Variables de entorno (o `SetEnv` en `.htaccess`, ver ejemplo comentado arriba de
 
 Los menús de ambos sitios se definen en `menuSitio()` (`includes/functions.php`).
 
+**Documentos institucionales** (`includes/contenido.php`): el texto de los documentos conceptuales del
+LIASP-CB (Introducción, Descripción con las siete capas y Objetivos) y del SIMCA (documento completo)
+se muestra en ventanas emergentes desde "Información LIASP-CB" / "Información SIMCA"
+(`views/partials/modal_documento.php`). Las siete líneas de trabajo del LIASP-CB son tarjetas en el
+portal (`lineasTrabajo()`). Para actualizar los textos basta editar `includes/contenido.php`.
+
 ## Interfaz (v1.1)
 
 - **Variables**: PM2.5, PM10 y CO se muestran siempre. CO2, O₃, NO₂, temperatura y humedad

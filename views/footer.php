@@ -5,7 +5,7 @@
                 <div class="footer-brand">
                     <img src="<?= asset('img/logo-ud.png') ?>" alt="Universidad Distrital Francisco José de Caldas">
                     <div>
-                        <strong>LIASP-CB</strong> · Laboratorio Urbano de Inteligencia Ambiental y Salud Pública
+                        <strong>LIASP-CB</strong> · Laboratorio Urbano de Inteligencia Ambiental y de Salud Pública para la Localidad de Ciudad Bolívar
                         <br><span>Universidad Distrital Francisco José de Caldas · <?= date('Y') ?></span>
                     </div>
                 </div>

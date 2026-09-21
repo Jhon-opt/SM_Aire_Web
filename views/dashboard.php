@@ -199,32 +199,20 @@
                 </section>
             </div>
 
-            <!-- Modal "Información SIMCA" (menú superior) -->
-            <div class="info-modal-overlay hidden" id="infoSimcaModal" onclick="if (event.target === this) cerrarInfoSimca()">
-                <div class="info-modal" role="dialog" aria-modal="true" aria-labelledby="infoSimcaTitulo">
-                    <div class="info-modal-header">
-                        <span class="brand-badge">SIMCA</span>
-                        <h3 id="infoSimcaTitulo">Sistema Inteligente de Monitoreo de Calidad del Aire basado en sensores de bajo costo</h3>
-                        <button class="chart-modal-close" onclick="cerrarInfoSimca()" title="Cerrar"><i class="fas fa-times"></i></button>
-                    </div>
-                    <div class="info-modal-body">
-                        <p>
-                            SIMCA es un proyecto del Laboratorio Urbano de Inteligencia Ambiental y Salud Pública (LIASP-CB)
-                            de la Universidad Distrital Francisco José de Caldas. Una red de sensores de bajo costo instalados
-                            en colegios mide material particulado (PM2.5 y PM10) y monóxido de carbono (CO) y envía los datos
-                            a este panel, que se actualiza automáticamente.
-                        </p>
-                        <div class="info-steps">
-                            <div class="info-step"><span class="highlight-icon"><i class="fas fa-microchip"></i></span><div><strong>1. Sensores</strong><p>Cada dispositivo mide el aire y envía una lectura por minuto.</p></div></div>
-                            <div class="info-step"><span class="highlight-icon"><i class="fas fa-server"></i></span><div><strong>2. Servidor</strong><p>Las mediciones se validan y almacenan en la base de datos del proyecto.</p></div></div>
-                            <div class="info-step"><span class="highlight-icon"><i class="fas fa-gauge-high"></i></span><div><strong>3. Panel</strong><p>Estado actual, gráficas, estadísticas y exportación en hora de Colombia.</p></div></div>
-                        </div>
-                        <h4>Índice de calidad del aire (ICA · Resolución 2254 de 2017)</h4>
-                        <ul class="info-legend">
-                            <?php foreach (icaCategorias() as $cat): ?>
-                                <li><span class="legend-dot" style="background: <?= $cat['color'] ?>"></span><?= htmlspecialchars($cat['etiqueta']) ?></li>
-                            <?php endforeach; ?>
-                        </ul>
-                    </div>
-                </div>
-            </div>
+            <!-- Ventana emergente "Información SIMCA": documento conceptual completo -->
+            <?php
+                ob_start();
+            ?>
+                <section class="doc-seccion" id="modal-simca-ica">
+                    <h3 class="doc-h2">Índice de calidad del aire (ICA)</h3>
+                    <p>Categorías de la Resolución 2254 de 2017 usadas en el panel como referencia rápida del estado del aire:</p>
+                    <ul class="info-legend">
+                        <?php foreach (icaCategorias() as $cat): ?>
+                            <li><span class="legend-dot" style="background: <?= $cat['color'] ?>"></span><?= htmlspecialchars($cat['etiqueta']) ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </section>
+            <?php
+                $docExtraHtml = ob_get_clean();
+                view('partials/modal_documento', ['doc' => documentoSimca(), 'docExtraHtml' => $docExtraHtml]);
+            ?>

@@ -484,7 +484,7 @@ function sitioInfo(string $sitio): array
 
     return [
         'sigla'  => 'LIASP-CB',
-        'nombre' => 'Laboratorio Urbano de Inteligencia Ambiental y Salud Pública',
+        'nombre' => 'Laboratorio Urbano de Inteligencia Ambiental y de Salud Pública para la Localidad de Ciudad Bolívar',
         'inicio' => BASE_URL . '/',
     ];
 }
@@ -500,7 +500,7 @@ function menuSitio(string $sitio): array
     if ($sitio === 'simca') {
         return [
             ['clave' => 'volver',      'texto' => 'Volver al portal',  'icono' => 'fa-arrow-left',      'href' => $base . '/', 'solo_icono' => true, 'titulo' => 'Volver al portal LIASP-CB'],
-            ['clave' => 'informacion', 'texto' => 'Información SIMCA', 'icono' => 'fa-circle-info',     'tipo' => 'accion', 'onclick' => 'abrirInfoSimca()'],
+            ['clave' => 'informacion', 'texto' => 'Información SIMCA', 'icono' => 'fa-circle-info',     'tipo' => 'accion', 'onclick' => "abrirModal('modal-simca')"],
             ['clave' => 'colegios',    'texto' => 'Colegios',          'icono' => 'fa-school',          'tipo' => 'accion', 'onclick' => 'irAColegios()'],
             ['clave' => 'consolidado', 'texto' => 'Consolidado',       'icono' => 'fa-layer-group',     'tipo' => 'accion', 'onclick' => 'verConsolidado()'],
             ['clave' => 'mapa',        'texto' => 'Mapa',              'icono' => 'fa-map-location-dot','href' => $base . '/mapa'],
@@ -511,7 +511,7 @@ function menuSitio(string $sitio): array
 
     return [
         ['clave' => 'home',          'texto' => 'Inicio',                'icono' => 'fa-house',        'href' => $base . '/', 'solo_icono' => true, 'titulo' => 'Inicio'],
-        ['clave' => 'informacion',   'texto' => 'Información LIASP-CB',  'icono' => 'fa-circle-info',  'href' => $base . '/#informacion'],
+        ['clave' => 'informacion',   'texto' => 'Información LIASP-CB',  'icono' => 'fa-circle-info',  'tipo' => 'accion', 'onclick' => "abrirModal('modal-liasp')"],
         ['clave' => 'colaboradores', 'texto' => 'Colaboradores',         'icono' => 'fa-handshake',    'href' => $base . '/#colaboradores'],
         ['clave' => 'proyectos',     'texto' => 'Proyectos',             'icono' => 'fa-diagram-project', 'tipo' => 'dropdown', 'href' => $base . '/#proyectos', 'hijos' => [
             ['texto' => 'SIMCA', 'detalle' => 'Monitoreo de calidad del aire en colegios', 'icono' => 'fa-wind', 'href' => $base . '/dashboard'],

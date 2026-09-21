@@ -5,10 +5,10 @@
                          <?= $portada ? 'style="background-image: url(\'' . $portada . '\')"' : '' ?>>
                     <div class="portal-hero-content">
                         <span class="hero-kicker">Universidad Distrital Francisco José de Caldas</span>
-                        <h1 class="portal-hero-title">Laboratorio Urbano de Inteligencia Ambiental y Salud Pública</h1>
+                        <h1 class="portal-hero-title">Laboratorio Urbano de Inteligencia Ambiental y de Salud Pública para la Localidad de Ciudad Bolívar</h1>
                         <p class="portal-hero-lema"><?= htmlspecialchars($contenido['lema']) ?></p>
                         <div class="portal-hero-actions">
-                            <a href="#informacion" class="btn btn-light"><i class="fas fa-circle-info"></i> Conoce el laboratorio</a>
+                            <button type="button" class="btn btn-light" onclick="abrirModal('modal-liasp')"><i class="fas fa-circle-info"></i> Conoce el laboratorio</button>
                             <a href="<?= BASE_URL ?>/dashboard" class="btn btn-white"><i class="fas fa-wind"></i> Ir a SIMCA</a>
                         </div>
                     </div>
@@ -20,7 +20,7 @@
                             <span class="simca-live"><span class="live-dot"></span> Monitoreo en tiempo real</span>
                         </div>
                         <h3>Sistema Inteligente de Monitoreo de Calidad del Aire</h3>
-                        <p>Sensores de bajo costo instalados en colegios: PM2.5, PM10 y CO con panel en vivo, estadísticas y exportación.</p>
+                        <p>Nodos de bajo costo instalados en colegios de Ciudad Bolívar: PM2.5, PM10 y CO con panel en vivo, estadísticas, mapa y exportación.</p>
 
                         <div class="simca-estado" id="simcaEstado">
                             <span class="simca-estado-icon"><i class="fas fa-satellite-dish"></i></span>
@@ -42,23 +42,7 @@
                     </a>
                 </section>
 
-                <!-- Líneas de trabajo -->
-                <section class="portal-section" id="lineas">
-                    <div class="section-header">
-                        <h3><i class="fas fa-flask"></i> Líneas de trabajo</h3>
-                    </div>
-                    <div class="lineas-grid">
-                        <?php foreach ($contenido['lineas'] as $linea): ?>
-                            <article class="linea-card">
-                                <span class="linea-icon"><i class="fas <?= $linea['icono'] ?>"></i></span>
-                                <h4><?= htmlspecialchars($linea['titulo']) ?></h4>
-                                <p><?= htmlspecialchars($linea['texto']) ?></p>
-                            </article>
-                        <?php endforeach; ?>
-                    </div>
-                </section>
-
-                <!-- Información LIASP-CB -->
+                <!-- Información LIASP-CB: resumen + documento completo en ventana emergente -->
                 <section class="portal-section" id="informacion">
                     <div class="info-grid">
                         <div class="info-text">
@@ -68,6 +52,9 @@
                             <?php foreach ($contenido['descripcion'] as $parrafo): ?>
                                 <p><?= htmlspecialchars($parrafo) ?></p>
                             <?php endforeach; ?>
+                            <button type="button" class="btn btn-primary" onclick="abrirModal('modal-liasp')">
+                                <i class="fas fa-book-open"></i> Ver documento completo
+                            </button>
                         </div>
                         <div class="info-highlights">
                             <?php foreach ($contenido['destacados'] as $d): ?>
@@ -80,6 +67,39 @@
                                 </div>
                             <?php endforeach; ?>
                         </div>
+                    </div>
+                </section>
+
+                <!-- Líneas de trabajo: una tarjeta por línea -->
+                <section class="portal-section" id="lineas">
+                    <div class="section-header">
+                        <h3><i class="fas fa-flask"></i> Líneas de trabajo</h3>
+                    </div>
+                    <p class="lineas-intro"><?= htmlspecialchars($contenido['lineas_intro']) ?></p>
+
+                    <div class="carrusel" id="lineasCarrusel" aria-roledescription="carrusel" aria-label="Líneas de trabajo">
+                        <button type="button" class="carrusel-btn carrusel-prev" onclick="moverCarrusel('lineasCarrusel', -1)" aria-label="Anterior">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <div class="carrusel-track" tabindex="0">
+                            <?php foreach ($contenido['lineas'] as $i => $linea): ?>
+                                <article class="linea-card carrusel-item" aria-label="Línea <?= $i + 1 ?> de <?= count($contenido['lineas']) ?>">
+                                    <div class="linea-head">
+                                        <span class="linea-icon"><i class="fas <?= $linea['icono'] ?>"></i></span>
+                                        <span class="linea-num">Línea <?= $i + 1 ?></span>
+                                    </div>
+                                    <h4><?= htmlspecialchars($linea['titulo']) ?></h4>
+                                    <p class="linea-texto"><?= htmlspecialchars($linea['texto']) ?></p>
+                                    <button type="button" class="linea-toggle" onclick="toggleLinea(this)">
+                                        <i class="fas fa-chevron-down"></i> Leer más
+                                    </button>
+                                </article>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="button" class="carrusel-btn carrusel-next" onclick="moverCarrusel('lineasCarrusel', 1)" aria-label="Siguiente">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                        <div class="carrusel-dots" role="tablist"></div>
                     </div>
                 </section>
 
@@ -153,3 +173,6 @@
                     </div>
                 </section>
             </div>
+
+            <!-- Ventana emergente "Información LIASP-CB": documento conceptual -->
+            <?php view('partials/modal_documento', ['doc' => documentoLiasp()]); ?>
