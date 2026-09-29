@@ -85,6 +85,13 @@ class IngestController
             return;
         }
 
-        jsonResponse(['ok' => true, 'id' => (int) $id], 201);
+        // Se devuelven el dispositivo y el colegio para que quien instala el nodo
+        // pueda confirmar en el monitor serie a qué institución está enviando.
+        jsonResponse([
+            'ok'          => true,
+            'id'          => (int) $id,
+            'dispositivo' => $dispositivo['codigo'] ?? null,
+            'colegio'     => $dispositivo['colegio_nombre'] ?? null,
+        ], 201);
     }
 }

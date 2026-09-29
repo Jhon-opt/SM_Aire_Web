@@ -89,7 +89,10 @@ class Dispositivo
         }
         try {
             return Database::fetchOne(
-                'SELECT * FROM dispositivo WHERE api_key = ?',
+                'SELECT d.*, c.nombre AS colegio_nombre
+                 FROM dispositivo d
+                 LEFT JOIN colegio c ON c.id_colegio = d.id_colegio
+                 WHERE d.api_key = ?',
                 [$apiKey]
             );
         } catch (PDOException) {

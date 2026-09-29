@@ -67,6 +67,17 @@ portal (`lineasTrabajo()`). Para actualizar los textos basta editar `includes/co
   sin coordenadas se listan bajo el mapa. Endpoint: `api/mapa`.
 - `APP_VERSION` se añade a las URLs de CSS/JS (`?v=`) para invalidar la caché al desplegar.
 
+## Agregar un nodo de monitoreo
+
+Cada nodo (institución + dispositivo) se crea con `database/nodo-nuevo.sql`. La `api_key` del
+dispositivo es lo único que identifica al nodo: el Arduino la envía en cada medición
+(`#define DEVICE_KEY` en el sketch) y el servidor la usa para saber a qué institución corresponde.
+Una clave por nodo; nunca deben subirse al repositorio.
+
+Al guardar una medición, `POST /api/ingest` responde con el dispositivo y la institución a los que
+quedó asociada (`{"ok":true,"id":123,"dispositivo":"SNS-...","colegio":"..."}`), lo que permite
+confirmar desde el monitor serie que cada Arduino está escribiendo donde corresponde.
+
 ## Ingesta de sensores (sin API externa)
 
 Los dispositivos envían mediciones con `POST /api/ingest` (solo modo `db`):
