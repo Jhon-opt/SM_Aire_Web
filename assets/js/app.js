@@ -359,6 +359,32 @@ function renderCards(tarjetas, fecha, { flash = false } = {}) {
     }).join('');
 }
 
+// Aviso de confiabilidad: cuántas lecturas sustentan el promedio del minuto
+function renderCalidad(data) {
+    const el = document.getElementById('avisoCalidad');
+    if (!el) return;
+
+    const n = data.n_muestras;
+    const minimo = (typeof N_MUESTRAS_MINIMO === 'number') ? N_MUESTRAS_MINIMO : 20;
+
+    if (n === null || n === undefined) {
+        el.classList.add('hidden');
+        return;
+    }
+
+    if (n >= minimo) {
+        el.className = 'aviso-calidad';
+        el.innerHTML = `<i class="fas fa-circle-check"></i> Promedio de <strong>${n}</strong> lecturas del último minuto`
+            + (data.latencia_seg !== null && data.latencia_seg !== undefined
+                ? ` · llegó en ${data.latencia_seg} s` : '');
+    } else {
+        el.className = 'aviso-calidad baja';
+        el.innerHTML = `<i class="fas fa-triangle-exclamation"></i> Dato menos confiable: el promedio se calculó con solo `
+            + `<strong>${n}</strong> lecturas (lo normal son unas 60). Revisa el sensor o la alimentación del nodo.`;
+    }
+    el.classList.remove('hidden');
+}
+
 // ── Estadísticas ────────────────────────────────────────
 function renderStats(estadisticas, totalRegistros) {
     const container = document.getElementById('statsContainer');
@@ -569,6 +595,7 @@ async function loadUltimas(filters, { live = false } = {}) {
 
         renderCards(data.tarjetas, data.fecha, { flash: live && nueva });
         renderEstado(data.estado_general, data.fecha, data.origen);
+        renderCalidad(data);
 
         const ult = document.getElementById('ultimaActualizacion');
         if (ult) {

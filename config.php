@@ -45,6 +45,10 @@ define('APP_TIMEZONE', 'America/Bogota');
 // (actualización en tiempo real de tarjetas, gráficas y tablas).
 define('LIVE_POLL_SECONDS', 10);
 
+// Calidad del dato: un promedio del minuto se calcula con ~60 lecturas.
+// Por debajo de este número se avisa en el panel de que es menos confiable.
+define('N_MUESTRAS_MINIMO', 20);
+
 // Mapa: vista predeterminada (Bogotá D.C.) cuando se abre el panel.
 define('MAPA_CENTRO_LAT', 4.7110);
 define('MAPA_CENTRO_LNG', -74.0721);

@@ -118,6 +118,7 @@
                             <span id="liveText">En vivo</span>
                         </span>
                     </div>
+                    <p class="aviso-calidad hidden" id="avisoCalidad"></p>
                     <div class="cards-grid" id="cardsContainer">
                         <div class="card card-placeholder">
                             <div class="card-empty">

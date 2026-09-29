@@ -2297,3 +2297,27 @@ a.proyecto-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg
     .carrusel-next { right: -6px; }
     .carrusel-btn { width: 36px; height: 36px; }
 }
+
+/* ── Aviso de confiabilidad del promedio ───────────────── */
+.aviso-calidad {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .8rem;
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: .5rem .8rem;
+    margin-bottom: .85rem;
+}
+
+.aviso-calidad i { color: var(--green-600); }
+
+.aviso-calidad.baja {
+    background: #FEF9C3;
+    border-color: #FDE68A;
+    color: #A16207;
+}
+
+.aviso-calidad.baja i { color: #CA8A04; }

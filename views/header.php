@@ -23,6 +23,7 @@ $activo = $navActivo ?? ($nav === 'dashboard' ? 'consolidado' : $nav);
         const APP_BASE_URL = '<?= BASE_URL ?>';
         const LIVE_POLL_SECONDS = <?= (int) LIVE_POLL_SECONDS ?>;
         const APP_TIMEZONE = '<?= APP_TIMEZONE ?>';
+        const N_MUESTRAS_MINIMO = <?= (int) N_MUESTRAS_MINIMO ?>;
         // Categorías y límites del ICA (misma tabla que includes/functions.php)
         const ICA = <?= json_encode([
             'categorias' => icaCategorias(),

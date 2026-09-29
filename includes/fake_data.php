@@ -95,10 +95,20 @@ function getFakeMediciones(): array
             }
         }
 
+        // Metadatos de calidad: lo normal son ~60 lecturas por minuto; de vez
+        // en cuando se simula un promedio con pocas muestras para poder ver el
+        // aviso de confiabilidad del panel.
+        $nMuestras = ($i % 13 === 0) ? rand(2, 15) : rand(52, 60);
+        $latencia  = rand(1, 4);
+
         $mediciones[] = array_merge(
             ['id_medicion' => $i + 1, 'id_dispositivo' => $did],
             $valores,
-            ['fecha_hora' => gmdate('Y-m-d H:i:s', $timestamp)]
+            [
+                'n_muestras' => $nMuestras,
+                'medido_en'  => gmdate('Y-m-d H:i:s', $timestamp - $latencia),
+                'fecha_hora' => gmdate('Y-m-d H:i:s', $timestamp),
+            ]
         );
     }
 

@@ -62,6 +62,14 @@ class ApiController
         jsonResponse([
             'fecha'            => $fecha,
             'fecha_local'      => formatDate($fecha, 'd/m/Y H:i:s'),
+            // Metadatos de calidad de la última lectura (null en nodos con
+            // firmware anterior o si la migración aún no se aplicó).
+            'n_muestras'       => isset($ultima['n_muestras']) && $ultima['n_muestras'] !== null
+                                    ? (int) $ultima['n_muestras'] : null,
+            'medido_en'        => $ultima['medido_en'] ?? null,
+            'latencia_seg'     => (isset($ultima['medido_en'], $ultima['fecha_hora']) && $ultima['medido_en'])
+                                    ? max(0, strtotime($ultima['fecha_hora'] . ' UTC') - strtotime($ultima['medido_en'] . ' UTC'))
+                                    : null,
             'tarjetas'         => $tarjetas,
             'estado_general'   => estadoGeneral($tarjetas),
             'origen'           => $fecha ? [

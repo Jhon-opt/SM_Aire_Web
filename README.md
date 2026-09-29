@@ -78,6 +78,21 @@ Al guardar una medición, `POST /api/ingest` responde con el dispositivo y la in
 quedó asociada (`{"ok":true,"id":123,"dispositivo":"SNS-...","colegio":"..."}`), lo que permite
 confirmar desde el monitor serie que cada Arduino está escribiendo donde corresponde.
 
+## Metadatos de calidad del dato
+
+Migración: `database/migration-calidad.sql` (columnas nuevas, todas NULL, compatibles con
+nodos que aún no se hayan actualizado).
+
+| Dato | Dónde se guarda | Para qué |
+|------|-----------------|----------|
+| `n_muestras` | `medicion` | Lecturas válidas que sustentan el promedio del minuto (lo normal son ~60). Por debajo de `N_MUESTRAS_MINIMO` (`config.php`) el panel avisa de que el dato es menos confiable |
+| `medido_en` | `medicion` | Hora de captura en el nodo (UTC, por NTP). `fecha_hora` sigue siendo la de recepción; la diferencia es la latencia |
+| `firmware_version` | `dispositivo` | Versión cargada en el nodo, para relacionar fallas con una versión |
+| `ultima_conexion` | `dispositivo` | Momento del último envío aceptado |
+| `r0_mq7`, `calibrado_en` | `dispositivo` | Calibración vigente del sensor de CO y su fecha |
+
+El endpoint `api/ultimas` devuelve además `n_muestras`, `medido_en` y `latencia_seg`.
+
 ## Ingesta de sensores (sin API externa)
 
 Los dispositivos envían mediciones con `POST /api/ingest` (solo modo `db`):
