@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+# Credenciales de los nodos Arduino (red WiFi y clave del dispositivo).
+# Cada nodo tiene su secretos.h local, a partir de secretos-ejemplo.h.
+arduino/**/secretos.h
+
 # Composer
 /vendor/
 

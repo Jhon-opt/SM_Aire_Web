@@ -78,6 +78,12 @@ Al guardar una medición, `POST /api/ingest` responde con el dispositivo y la in
 quedó asociada (`{"ok":true,"id":123,"dispositivo":"SNS-...","colegio":"..."}`), lo que permite
 confirmar desde el monitor serie que cada Arduino está escribiendo donde corresponde.
 
+## Firmware de los nodos
+
+El programa que ejecutan los Arduino está en [`arduino/`](arduino/) (ver su README). Las
+credenciales de cada nodo van en `arduino/pms7003_mq7_api/secretos.h`, que **no se sube al
+repositorio**: se crea copiando `secretos-ejemplo.h`.
+
 ## Metadatos de calidad del dato
 
 Migración: `database/migration-calidad.sql` (columnas nuevas, todas NULL, compatibles con
